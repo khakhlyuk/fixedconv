@@ -13,9 +13,9 @@ import torchvision.utils as vutils
 import matplotlib.pyplot as plt
 
 
-import models.dcgan as dcgan
-from models.functions import weights_init_dcgan
-from utils.conv_config import get_fixed_conv_params
+import modules.dcgan as dcgan
+from modules.functions import weights_init_dcgan
+from modules.fixedconv import get_fixed_conv_params
 
 
 conv_type_names = ['G', 'A']
@@ -151,7 +151,8 @@ ndf = args.ndf * args.kD
 nz_hw = 4 if args.fixedG else 1  # height/width of noise vector
 
 # Gaussian Layer Parameters
-fixed_conv_params = get_fixed_conv_params(args.conv_type, 4, args.sigma)
+fixed_conv_params = get_fixed_conv_params(
+    args.conv_type, bilin_interpol=True, n=4, sigma=args.sigma)
 
 # Creating G and D
 if args.fixedG:

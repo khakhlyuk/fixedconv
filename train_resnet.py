@@ -2,7 +2,7 @@ import argparse
 
 from utils.data_loader import get_train_valid_loader, get_test_loader
 from utils.utils import num_params, save_summary, format_scientific
-from utils.conv_config import get_fixed_conv_params
+from modules.fixedconv import get_fixed_conv_params
 
 from fastai.vision import *
 from fastai.vision.data import *
@@ -10,14 +10,14 @@ from fastai.callbacks import EarlyStoppingCallback, CSVLogger
 from utils.callbacks import ReduceLROnPlateauCallback, SaveModelCallback, MetricTracker
 from utils.tensorboard import LearnerTensorboardWriter
 
-import models.nets as nets
+import modules.nets as nets
 
 
 model_names = sorted(name for name in nets.__dict__
                      if name.islower() and not name.startswith("__")
                      and "resnet" in name
                      and callable(nets.__dict__[name]))
-conv_type_names = ['G', 'A', 'M']
+conv_type_names = ['G', 'B']
 
 parser = argparse.ArgumentParser(description='Training resnets and fixed resnets')
 parser.add_argument('--model', '-a', metavar='MODEL',
@@ -32,7 +32,7 @@ parser.add_argument('-k', default=1, type=int,
                     help='widening factor k (default: 1). Used for fixed resnets only')
 parser.add_argument('--conv_type', default='G',
                     choices=conv_type_names,
-                    help='Conv types. Gaussian, AvgPool and Maxpool. '
+                    help='Conv types. Gaussian, Bilinear interpolation etc. '
                          'Used for fixed resnets only.'
                          'Choices: ' + ' | '.join(conv_type_names))
 parser.add_argument('--sigma', type=float, default=0.8,
@@ -70,7 +70,8 @@ def main():
     else:  # for fixed resnets
         fully_fixed = True if args.ff == 'y' else False
         conv_type = args.conv_type
-        fixed_conv_params = get_fixed_conv_params(conv_type, 3, args.sigma)
+        fixed_conv_params = get_fixed_conv_params(
+            args.conv_type, bilin_interpol=True, n=3, sigma=args.sigma)
 
         model_code = model_name + '(k={},type={},fully_fixed={},sigma={})'.format(
             k, conv_type, fully_fixed, args.sigma)
