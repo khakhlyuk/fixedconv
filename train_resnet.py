@@ -70,10 +70,10 @@ def main():
     else:  # for fixed resnets
         fully_fixed = True if args.ff == 'y' else False
         conv_type = args.conv_type
-        fixed_conv_params = get_fixed_conv_params(conv_type)
+        fixed_conv_params = get_fixed_conv_params(conv_type, 3, args.sigma)
 
-        model_code = model_name + '(k={},type={},fully_fixed={})'.format(
-            k, conv_type, fully_fixed)
+        model_code = model_name + '(k={},type={},fully_fixed={},sigma={})'.format(
+            k, conv_type, fully_fixed, args.sigma)
         model = nets.__dict__[model_name](k, fully_fixed, fixed_conv_params)
 
     save_model = True

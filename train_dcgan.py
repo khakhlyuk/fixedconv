@@ -1,5 +1,6 @@
 import argparse
 import os
+from functools import partial
 import random
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
@@ -162,8 +163,11 @@ if args.fixedD:
 else:
     netD = dcgan.Discriminator(nc, ndf).to(device)
 
-netG.apply(weights_init_dcgan)
-netD.apply(weights_init_dcgan)
+# CHANGE if you want
+init_fixed = False
+
+netG.apply(partial(weights_init_dcgan, init_fixed=init_fixed))
+netD.apply(partial(weights_init_dcgan, init_fixed=init_fixed))
 
 if args.netG_path != '':
     netG.load_state_dict(torch.load(args.netG_path))
@@ -185,6 +189,9 @@ optimizerG = optim.Adam(netG.parameters(), lr=args.lr, betas=(args.beta1, 0.999)
 G_losses = []
 D_losses = []
 iters = 0
+
+# Change if you want to checkpoint more often
+checkpoint_every = args.num_epochs // 2
 
 for epoch in range(args.num_epochs):
     for i, data in enumerate(dataloader, 0):
@@ -246,9 +253,10 @@ for epoch in range(args.num_epochs):
                       padding=2,
                       normalize=True,)
 
-    # do checkpointing
-    torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (outf, epoch))
-    torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (outf, epoch))
+    # do checkpointing (every n epochs and on the last epoch)
+    if ((epoch + 1) % checkpoint_every == 0) or (epoch == args.num_epochs-1):
+        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (outf, epoch))
+        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (outf, epoch))
 
 # Grab a batch of real images from the dataloader and save it
 real = next(iter(dataloader))[0]
