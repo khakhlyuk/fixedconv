@@ -17,7 +17,7 @@ model_names = sorted(name for name in nets.__dict__
                      if name.islower() and not name.startswith("__")
                      and "resnet" in name
                      and callable(nets.__dict__[name]))
-conv_type_names = ['G', 'B']
+conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser(description='Training resnets and fixed resnets')
 parser.add_argument('--model', '-a', metavar='MODEL',
@@ -32,7 +32,7 @@ parser.add_argument('-k', default=1, type=int,
                     help='widening factor k (default: 1). Used for fixed resnets only')
 parser.add_argument('--conv_type', default='G',
                     choices=conv_type_names,
-                    help='Conv types. Gaussian, Bilinear interpolation etc. '
+                    help='Fixed kernel types. Random weights, Gaussian filter or Bilinear interpolation etc. '
                          'Used for fixed resnets only.'
                          'Choices: ' + ' | '.join(conv_type_names))
 parser.add_argument('--sigma', type=float, default=0.8,
@@ -55,10 +55,20 @@ parser.add_argument('--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
+parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 
 def main():
     args = parser.parse_args()
+
+    if args.manualSeed is None:
+        seed = random.randint(1, 10000)
+    else:
+        seed = args.manualSeed
+    print("Random Seed: ", seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     cuda = args.cuda
     k = args.k
@@ -71,10 +81,10 @@ def main():
         fully_fixed = True if args.ff == 'y' else False
         conv_type = args.conv_type
         fixed_conv_params = get_fixed_conv_params(
-            args.conv_type, bilin_interpol=True, n=3, sigma=args.sigma)
+            args.conv_type, bilin_interpol=True, kernel_size=3, sigma=args.sigma)
 
-        model_code = model_name + '(k={},type={},fully_fixed={},sigma={})'.format(
-            k, conv_type, fully_fixed, args.sigma)
+        model_code = model_name + '(k={},type={},fully_fixed={},type={},bilin_inter=True)'.format(
+            k, conv_type, fully_fixed, conv_type)
         model = nets.__dict__[model_name](k, fully_fixed, fixed_conv_params)
 
     save_model = True
@@ -107,7 +117,7 @@ def main():
 
     # Data
     train_loader, valid_loader = get_train_valid_loader(
-        data_dir=data_path, valid_size=0.1, augment=True, random_seed=42,
+        data_dir=data_path, valid_size=0.1, augment=True, random_seed=seed,
         batch_size=bs, num_workers=num_workers, shuffle=True,
         pin_memory=pin_memory, show_sample=False)
 

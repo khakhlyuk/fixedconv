@@ -2,6 +2,7 @@ import argparse
 import os
 from functools import partial
 import random
+import numpy as np
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
@@ -18,7 +19,7 @@ from modules.functions import weights_init_dcgan
 from modules.fixedconv import get_fixed_conv_params
 
 
-conv_type_names = ['G', 'B']
+conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True,
@@ -36,7 +37,7 @@ parser.add_argument('--freezeG', action='store_true', help="Freeze G and don't t
 parser.add_argument('--freezeD', action='store_true', help="Freeze D and don't train it")
 parser.add_argument('--conv_type', default='G',
                     choices=conv_type_names,
-                    help='Conv types. Gaussian or AvgPool'
+                    help='Fixed kernel types. Random weights, Gaussian filter or Bilinear interpolation etc. '
                          'Used for fixed nets only.'
                          'Choices: ' + ' | '.join(conv_type_names))
 parser.add_argument('--sigma', type=float, default=0.75,
@@ -79,10 +80,13 @@ except OSError:
     pass
 
 if args.manualSeed is None:
-    args.manualSeed = random.randint(1, 10000)
-print("Random Seed: ", args.manualSeed)
-random.seed(args.manualSeed)
-torch.manual_seed(args.manualSeed)
+    seed = random.randint(1, 10000)
+else:
+    seed = args.manualSeed
+print("Random Seed: ", seed)
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
 
 cudnn.benchmark = True
 
@@ -152,7 +156,7 @@ nz_hw = 4 if args.fixedG else 1  # height/width of noise vector
 
 # Gaussian Layer Parameters
 fixed_conv_params = get_fixed_conv_params(
-    args.conv_type, bilin_interpol=True, n=4, sigma=args.sigma)
+    args.conv_type, bilin_interpol=True, kernel_size=4, sigma=args.sigma)
 
 # Creating G and D
 if args.fixedG:

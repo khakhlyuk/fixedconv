@@ -1,5 +1,5 @@
 import torch.nn as nn
-from modules.resnet import FixedSeparableConv2d, FixedSeparableConvTranspose2d
+from modules.resnet import FixedSeparableConv2d, FixedSeparableConvTrans2d
 
 
 class Generator(nn.Module):
@@ -73,27 +73,27 @@ class FixedGenerator(nn.Module):
         super(FixedGenerator, self).__init__()
         self.main = nn.Sequential(
             # input is Z. nz x 4 x 4
-            FixedSeparableConvTranspose2d(nz, ngf * 8, 1, fixed_conv_params),
+            FixedSeparableConvTrans2d(nz, ngf * 8, 1, fixed_conv_params),
             nn.BatchNorm2d(ngf * 8),
             nn.ReLU(True),
             # state size. (ngf*8) x 4 x 4
 
-            FixedSeparableConvTranspose2d(ngf * 8, ngf * 4, 2, fixed_conv_params),
+            FixedSeparableConvTrans2d(ngf * 8, ngf * 4, 2, fixed_conv_params),
             nn.BatchNorm2d(ngf * 4),
             nn.ReLU(True),
             # state size. (ngf*4) x 8 x 8
 
-            FixedSeparableConvTranspose2d(ngf * 4, ngf * 2, 2, fixed_conv_params),
+            FixedSeparableConvTrans2d(ngf * 4, ngf * 2, 2, fixed_conv_params),
             nn.BatchNorm2d(ngf * 2),
             nn.ReLU(True),
             # state size. (ngf*2) x 16 x 16
 
-            FixedSeparableConvTranspose2d(ngf * 2, ngf * 1, 2, fixed_conv_params),
+            FixedSeparableConvTrans2d(ngf * 2, ngf * 1, 2, fixed_conv_params),
             nn.BatchNorm2d(ngf * 1),
             nn.ReLU(True),
             # state size. (ngf) x 32 x 32
 
-            FixedSeparableConvTranspose2d(ngf * 1, nc, 2, fixed_conv_params),
+            FixedSeparableConvTrans2d(ngf * 1, nc, 2, fixed_conv_params),
             nn.Tanh()
             # state size. (nc) x 64 x 64
         )
