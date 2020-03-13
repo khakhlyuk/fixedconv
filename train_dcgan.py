@@ -18,7 +18,7 @@ from modules.functions import weights_init_dcgan
 from modules.fixedconv import get_fixed_conv_params
 
 
-conv_type_names = ['G', 'A']
+conv_type_names = ['G', 'B']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True,

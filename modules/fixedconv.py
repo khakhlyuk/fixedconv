@@ -42,14 +42,14 @@ def create_fixed_conv_tranpose(planes, stride, fixed_conv_params):
 
     elif conv_type == 'gaussian':
         if stride != 1:
-            raise RuntimeError("Using transposed convolutions with strides generally works bad."
-                               "Consider bilinear upsamling + transposed conv with stride 1. "
-                               "If you are sure you want to use this code anyway, remove this line.")
-        else:
-            kernel_size = fixed_conv_params['kernel_size']
-            sigma = fixed_conv_params['sigma']
+            raise RuntimeError(
+                "Using transposed convolutions with strides generally works bad."
+                "Consider bilinear upsamling + transposed conv with stride 1. "
+                "If you are sure you want to use this code anyway, remove this line.")
+        kernel_size = fixed_conv_params['kernel_size']
+        sigma = fixed_conv_params['sigma']
 
-            fixed_conv = GaussianLayerTransposeWPad(planes, kernel_size, sigma, stride)
+        fixed_conv = GaussianLayerTransposeWPad(planes, kernel_size, sigma, stride)
     else:
         raise RuntimeError("Unknown kernel")
     return fixed_conv
@@ -237,9 +237,16 @@ class GaussianLayerTransposeWPad(nn.Module):
         p1, p2 = same_padding(kernel_size, stride)
         output_padding = 1 if (kernel_size-stride) % 2 == 1 else 0
         self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
-        self.conv = GaussianLayerTranspose(planes, kernel_size, sigma, stride,
-                                           padding=kernel_size-1,
-                                           output_padding=output_padding)
+        if stride == 1:
+            """ There is a problem with the GaussianLayerTranpose not working 
+            for a combination of values k=4,s=1,o=1 
+            Regular GaussianLayer is equivalent for s=1 and can be used here"""
+            self.conv = GaussianLayer(
+                planes, kernel_size, sigma, stride, padding=0)
+        else:  # for stride > 1 it works fine
+            self.conv = GaussianLayerTranspose(
+                planes, kernel_size, sigma, stride,
+                padding=kernel_size-1, output_padding=output_padding)
 
     def forward(self, x):
         x = self.pad(x)
