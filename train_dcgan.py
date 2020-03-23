@@ -18,7 +18,7 @@ import modules.dcgan as dcgan
 from modules.functions import weights_init_dcgan
 from modules.fixedconv import get_fixed_conv_params
 
-
+net_type_names = ['A', 'B', 'C']
 conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser()
@@ -35,7 +35,14 @@ parser.add_argument('--fixedG', action='store_true', help='Use Fixed G')
 parser.add_argument('--fixedD', action='store_true', help='Use Fixed D')
 parser.add_argument('--freezeG', action='store_true', help="Freeze G and don't train it")
 parser.add_argument('--freezeD', action='store_true', help="Freeze D and don't train it")
-parser.add_argument('--conv_type', default='G',
+parser.add_argument('--net_type', default='A',
+                    choices=conv_type_names,
+                    help='Type of a fixed DCGAN to use'
+                         'A - all convs are fixed. '
+                         'B - first conv in G and last conv in D are trainable, others are fixed.'
+                         'C - first and last convs in both G and D are trainable, others are fixed.'
+                         'Choices: ' + ' | '.join(net_type_names))
+parser.add_argument('--conv_type', default='R',
                     choices=conv_type_names,
                     help='Fixed kernel types. Random weights, Gaussian filter or Bilinear interpolation etc. '
                          'Used for fixed nets only.'
@@ -67,8 +74,6 @@ parser.add_argument('--netD_path', default='',
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('--classes', default='bedroom',
                     help='comma separated list of classes for the lsun data set')
-parser.add_argument('--option_fD', default='A',
-                    help='Option for Fixed Discriminator. Check docs. ')
 
 args = parser.parse_args()
 print(args)
@@ -148,23 +153,27 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batchSize,
 gpus = [('cuda:' + x) for x in args.gpus.split(',')]
 device = torch.device(gpus[0] if torch.cuda.is_available() else "cpu")
 
-nz = args.nz * args.kG
+nz  = args.nz
+nz *= args.kG if args.net_type == "A" else 1
 ngf = args.ngf * args.kG
 ndf = args.ndf * args.kD
 
-nz_hw = 4 if args.fixedG else 1  # height/width of noise vector
+nz_hw = 1
 
 # Gaussian Layer Parameters
 fixed_conv_params = get_fixed_conv_params(
-    args.conv_type, bilin_interpol=True, kernel_size=4, sigma=args.sigma)
+    args.conv_type, bilin_interpol=True, kernel_size=4, sigma=args.sigma,
+    initialization='He')  # 'DCGAN'
 
 # Creating G and D
 if args.fixedG:
-    netG = dcgan.FixedGenerator(nz, ngf, nc, fixed_conv_params).to(device)
+    netG = dcgan.FixedGenerator(nz, ngf, nc, fixed_conv_params, args.net_type,
+                                args.kG).to(device)
 else:
     netG = dcgan.Generator(nz, ngf, nc).to(device)
 if args.fixedD:
-    netD = dcgan.FixedDiscriminator(nc, ndf, fixed_conv_params, args.option_fD).to(device)
+    netD = dcgan.FixedDiscriminator(nc, ndf, fixed_conv_params, args.net_type,
+                                    args.kD).to(device)
 else:
     netD = dcgan.Discriminator(nc, ndf).to(device)
 
@@ -272,8 +281,8 @@ vutils.save_image(real[:64],
 # Losses
 plt.figure(figsize=(10,5))
 plt.title("Generator and Discriminator Loss During Training")
-plt.plot(G_losses,label="G")
-plt.plot(D_losses,label="D")
+plt.plot(G_losses, label="G")
+plt.plot(D_losses, label="D")
 plt.xlabel("iterations")
 plt.ylabel("Loss")
 plt.legend()

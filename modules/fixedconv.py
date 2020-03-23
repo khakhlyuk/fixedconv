@@ -13,65 +13,6 @@ from modules.functions import same_padding
 from abc import ABC, abstractmethod
 
 
-def create_fixed_conv(planes, stride, fixed_conv_params):
-    f = fixed_conv_params  # to be short
-    conv_type = f['conv_type']
-
-    if conv_type == 'bilinear':
-        if stride != 1:
-            fixed_conv = nn.AvgPool2d(kernel_size=stride, stride=stride)
-        else:
-            fixed_conv = None
-
-    if conv_type == 'random':
-        if f['initialization'] == 'He':
-            mean = 0
-            std = math.sqrt(2 / planes)
-        else:
-            mean = f['mean']
-            std = f['std']
-        fixed_conv = RandomConvWpad(planes, f['kernel_size'], stride, mean, std)
-
-    elif conv_type == 'gaussian':
-        fixed_conv = GaussianLayerWPad(planes, f['kernel_size'], f['sigma'], stride)
-    else:
-        raise RuntimeError("Unknown kernel")
-    return fixed_conv
-
-
-def create_fixed_conv_transpose(planes, stride, fixed_conv_params):
-    f = fixed_conv_params  # to be short
-    conv_type = f['conv_type']
-
-    if stride != 1 and conv_type in ['random', 'gaussian']:
-        raise RuntimeError(
-            "Using transposed convolutions with strides generally works bad."
-            "Consider bilinear upsamling + transposed conv with stride 1. "
-            "If you are sure you want to use this code anyway, remove this line.")
-
-    if conv_type == 'bilinear':
-        if stride != 1:
-            fixed_conv = nn.UpsamplingBilinear2d(scale_factor=2)
-        else:
-            fixed_conv = None  # Identity
-
-    elif conv_type == 'random':
-        if f['initialization'] == 'He':
-            mean = 0
-            std = math.sqrt(2 / planes)
-        else:
-            mean = f['mean']
-            std = f['std']
-        fixed_conv = RandomConvTransWpad(planes, f['kernel_size'], stride, mean, std)
-
-    elif conv_type == 'gaussian':
-
-        fixed_conv = GaussianLayerTransWPad(planes, f['kernel_size'], f['sigma'], stride)
-    else:
-        raise RuntimeError("Unknown kernel")
-    return fixed_conv
-
-
 def get_fixed_conv_params(conv_type, bilin_interpol=False, kernel_size=None,
                           mean=None, std=None, initialization=None, sigma=None, amount=None):
     """
@@ -88,7 +29,7 @@ def get_fixed_conv_params(conv_type, bilin_interpol=False, kernel_size=None,
         kernel_size (int): kernel_size for random, gaussian and sharpening filters
         mean (float): for random filter, mean
         std (float): for random filter, std
-        initialization (float): for random filter 'He' will do He initialization,
+        initialization (str): for random filter 'He' will do He initialization,
             otherwise mean and std will be used.
         sigma (float): for gaussian and sharpening kernels - sigma, standard deviation.
         amount (float): amount of sharpening to apply.
@@ -124,6 +65,71 @@ def get_fixed_conv_params(conv_type, bilin_interpol=False, kernel_size=None,
     else:
         raise RuntimeError("conv_type not defined")
     return fixed_conv_params
+
+
+def create_fixed_conv(planes, stride, fixed_conv_params):
+    f = fixed_conv_params  # to be short
+    conv_type = f['conv_type']
+
+    if conv_type == 'bilinear':
+        if stride != 1:
+            fixed_conv = nn.AvgPool2d(kernel_size=stride, stride=stride)
+        else:
+            fixed_conv = None
+
+    if conv_type == 'random':
+        if f['initialization'] == 'He':
+            mean = 0
+            std = math.sqrt(2 / planes)
+        elif f['initialization'] == 'DCGAN':
+            mean = 0
+            std = 0.02
+        else:
+            mean = f['mean']
+            std = f['std']
+        fixed_conv = RandomConvWpad(planes, f['kernel_size'], stride, mean, std)
+
+    elif conv_type == 'gaussian':
+        fixed_conv = GaussianLayerWPad(planes, f['kernel_size'], f['sigma'], stride)
+    else:
+        raise RuntimeError("Unknown kernel")
+    return fixed_conv
+
+
+def create_fixed_conv_transpose(planes, stride, fixed_conv_params):
+    f = fixed_conv_params  # to be short
+    conv_type = f['conv_type']
+
+    if stride != 1 and conv_type in ['random', 'gaussian']:
+        raise RuntimeError(
+            "Using transposed convolutions with strides generally works bad."
+            "Consider bilinear upsamling + transposed conv with stride 1. "
+            "If you are sure you want to use this code anyway, remove this line.")
+
+    if conv_type == 'bilinear':
+        if stride != 1:
+            fixed_conv = nn.UpsamplingBilinear2d(scale_factor=2)
+        else:
+            fixed_conv = None  # Identity
+
+    elif conv_type == 'random':
+        if f['initialization'] == 'He':
+            mean = 0
+            std = math.sqrt(2 / planes)
+        elif f['initialization'] == 'DCGAN':
+            mean = 0
+            std = 0.02
+        else:
+            mean = f['mean']
+            std = f['std']
+        fixed_conv = RandomConvTransWpad(planes, f['kernel_size'], stride, mean, std)
+
+    elif conv_type == 'gaussian':
+
+        fixed_conv = GaussianLayerTransWPad(planes, f['kernel_size'], f['sigma'], stride)
+    else:
+        raise RuntimeError("Unknown kernel")
+    return fixed_conv
 
 
 class FixedConv2d(nn.Module, ABC):

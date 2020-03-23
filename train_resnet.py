@@ -30,7 +30,7 @@ parser.add_argument('--ff', '--fully_fixed',
                          'Choices: "y", "n"')
 parser.add_argument('-k', default=1, type=int,
                     help='widening factor k (default: 1). Used for fixed resnets only')
-parser.add_argument('--conv_type', default='G',
+parser.add_argument('--conv_type', default='R',
                     choices=conv_type_names,
                     help='Fixed kernel types. Random weights, Gaussian filter or Bilinear interpolation etc. '
                          'Used for fixed resnets only.'
@@ -83,7 +83,7 @@ def main():
         fixed_conv_params = get_fixed_conv_params(
             args.conv_type, bilin_interpol=True, kernel_size=3, sigma=args.sigma)
 
-        model_code = model_name + '(k={},type={},fully_fixed={},type={},bilin_inter=True)'.format(
+        model_code = model_name + '(k={},type={},fully_fixed={},type={})'.format(
             k, conv_type, fully_fixed, conv_type)
         model = nets.__dict__[model_name](k, fully_fixed, fixed_conv_params)
 
@@ -154,8 +154,9 @@ def main():
                     path=logs_path, model_dir=model_saves_dir)
 
     # Training
+    print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
     learn.fit(epochs, lr=max_lr, wd=weight_decay)
-
+    print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
     # Gathering stats and saving them
     best_epoch, best_value = learn.save_model_callback.best_epoch, learn.save_model_callback.best
     time_to_best_epoch = learn.save_model_callback.time_to_best_epoch
