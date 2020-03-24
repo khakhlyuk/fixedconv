@@ -17,12 +17,16 @@ model_names = sorted(name for name in nets.__dict__
                      if name.islower() and not name.startswith("__")
                      and "resnet" in name
                      and callable(nets.__dict__[name]))
+datasets = ['cifar10', 'cifar100', 'mnist', 'fmnist']
 conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser(description='Training resnets and fixed resnets')
-parser.add_argument('--model', '-a', metavar='MODEL',
+parser.add_argument('--model', '-a', required=True, metavar='MODEL',
                     choices=model_names,
                     help='model architecture: ' + ' | '.join(model_names))
+parser.add_argument('--dataset', required=True,
+                    choices=datasets,
+                    help='datasets: ' + ' | '.join(datasets))
 parser.add_argument('--ff', '--fully_fixed',
                     choices=['y', 'n'],
                     help='If convolutions at stage 0 should be replaced by fixed too.'
@@ -74,9 +78,16 @@ def main():
     k = args.k
     model_name = args.model
 
+    if args.dataset in ['cifar10', 'mnist', 'fmnist']:
+        num_classes = 10
+    elif args.dataset in ['cifar100']:
+        num_classes = 100
+    else:
+        raise RuntimeError
+
     if model_name.startswith("resnet"):  # for original resnets
         model_code = model_name
-        model = nets.__dict__[model_name]()
+        model = nets.__dict__[model_name](num_classes=num_classes)
     else:  # for fixed resnets
         fully_fixed = True if args.ff == 'y' else False
         conv_type = args.conv_type
@@ -85,7 +96,8 @@ def main():
 
         model_code = model_name + '(k={},type={},fully_fixed={},type={})'.format(
             k, conv_type, fully_fixed, conv_type)
-        model = nets.__dict__[model_name](k, fully_fixed, fixed_conv_params)
+        model = nets.__dict__[model_name](k, fully_fixed, fixed_conv_params,
+                                          num_classes)
 
     save_model = True
     log = True
@@ -117,11 +129,13 @@ def main():
 
     # Data
     train_loader, valid_loader = get_train_valid_loader(
+        dataset=args.dataset,
         data_dir=data_path, valid_size=0.1, augment=True, random_seed=seed,
         batch_size=bs, num_workers=num_workers, shuffle=True,
         pin_memory=pin_memory, show_sample=False)
 
     test_loader = get_test_loader(
+        dataset=args.dataset,
         data_dir=data_path,
         batch_size=bs, num_workers=num_workers, shuffle=False,
         pin_memory=pin_memory)
@@ -154,9 +168,8 @@ def main():
                     path=logs_path, model_dir=model_saves_dir)
 
     # Training
-    print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
+    # print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
     learn.fit(epochs, lr=max_lr, wd=weight_decay)
-    print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
     # Gathering stats and saving them
     best_epoch, best_value = learn.save_model_callback.best_epoch, learn.save_model_callback.best
     time_to_best_epoch = learn.save_model_callback.time_to_best_epoch

@@ -3,10 +3,9 @@ import torch
 import torchvision
 import matplotlib.pyplot as plt
 
-from utils.data_stats import MEANS, STDS
 
-
-def plot_images(images, cls_true=None, cls_pred=None, interpolate=False, unnormalize=False):
+def plot_images(images, cls_true=None, cls_pred=None, interpolate=False, unnormalize=False,
+                MEAN=None, STD=None, LABEL_NAMES=None):
     """
     Adapted from https://gist.github.com/kevinzakka/d33bf8d6c7f06a9d8c76d97a7879f5cb
     """
@@ -17,8 +16,8 @@ def plot_images(images, cls_true=None, cls_pred=None, interpolate=False, unnorma
         img = images[i]
         
         if unnormalize:
-            means = torch.tensor(MEANS).view(3, 1, 1)
-            stds = torch.tensor(STDS).view(3, 1, 1)
+            means = torch.tensor(MEAN).view(3, 1, 1)
+            stds = torch.tensor(STD).view(3, 1, 1)
             img = img * stds + means
         
         if interpolate:
@@ -46,14 +45,15 @@ def plot_images(images, cls_true=None, cls_pred=None, interpolate=False, unnorma
     plt.show()
 
 
-def imshow(img, interpolate=False, unnormalize=False):
+def imshow(img, interpolate=False, unnormalize=False,
+           MEAN=None, STD=None, LABEL_NAMES=None):
 
     if len(img.size()) == 4:
         imshow(torchvision.utils.make_grid(img), interpolate, unnormalize)
     else:
         if unnormalize:
-            means = torch.tensor(MEANS).view(3, 1, 1)
-            stds = torch.tensor(STDS).view(3, 1, 1)
+            means = torch.tensor(MEAN).view(3, 1, 1)
+            stds = torch.tensor(STD).view(3, 1, 1)
             img = img * stds + means
 
         if interpolate:
