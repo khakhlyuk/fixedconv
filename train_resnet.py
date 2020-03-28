@@ -168,6 +168,7 @@ def main():
                     path=logs_path, model_dir=model_saves_dir)
 
     # Training
+    print('Training', model_code)
     # print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
     learn.fit(epochs, lr=max_lr, wd=weight_decay)
     # Gathering stats and saving them

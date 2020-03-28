@@ -36,7 +36,7 @@ parser.add_argument('--fixedD', action='store_true', help='Use Fixed D')
 parser.add_argument('--freezeG', action='store_true', help="Freeze G and don't train it")
 parser.add_argument('--freezeD', action='store_true', help="Freeze D and don't train it")
 parser.add_argument('--net_type', default='A',
-                    choices=conv_type_names,
+                    choices=net_type_names,
                     help='Type of a fixed DCGAN to use'
                          'A - all convs are fixed. '
                          'B - first conv in G and last conv in D are trainable, others are fixed.'
@@ -155,18 +155,20 @@ device = torch.device(gpus[0] if torch.cuda.is_available() else "cpu")
 
 nz  = args.nz
 nz *= args.kG if args.net_type == "A" else 1
-ngf = args.ngf * args.kG
-ndf = args.ndf * args.kD
+ngf = args.ngf
+ndf = args.ndf
 
 nz_hw = 1
 
 # Gaussian Layer Parameters
 fixed_conv_params = get_fixed_conv_params(
     args.conv_type, bilin_interpol=True, kernel_size=4, sigma=args.sigma,
-    initialization='He')  # 'DCGAN'
+    initialization='He')
 
 # Creating G and D
 if args.fixedG:
+    print(nz, ngf, nc, fixed_conv_params, args.net_type,
+                                args.kG)
     netG = dcgan.FixedGenerator(nz, ngf, nc, fixed_conv_params, args.net_type,
                                 args.kG).to(device)
 else:

@@ -70,6 +70,7 @@ def get_fixed_conv_params(conv_type, bilin_interpol=False, kernel_size=None,
 def create_fixed_conv(planes, stride, fixed_conv_params):
     f = fixed_conv_params  # to be short
     conv_type = f['conv_type']
+    k = f['kernel_size']
 
     if conv_type == 'bilinear':
         if stride != 1:
@@ -77,20 +78,18 @@ def create_fixed_conv(planes, stride, fixed_conv_params):
         else:
             fixed_conv = None
 
-    if conv_type == 'random':
+    elif conv_type == 'random':
+
         if f['initialization'] == 'He':
             mean = 0
             std = math.sqrt(2 / planes)
-        elif f['initialization'] == 'DCGAN':
-            mean = 0
-            std = 0.02
         else:
             mean = f['mean']
             std = f['std']
-        fixed_conv = RandomConvWpad(planes, f['kernel_size'], stride, mean, std)
+        fixed_conv = RandomConvWpad(planes, k, stride, mean, std)
 
     elif conv_type == 'gaussian':
-        fixed_conv = GaussianLayerWPad(planes, f['kernel_size'], f['sigma'], stride)
+        fixed_conv = GaussianLayerWPad(planes, k, f['sigma'], stride)
     else:
         raise RuntimeError("Unknown kernel")
     return fixed_conv
@@ -99,12 +98,12 @@ def create_fixed_conv(planes, stride, fixed_conv_params):
 def create_fixed_conv_transpose(planes, stride, fixed_conv_params):
     f = fixed_conv_params  # to be short
     conv_type = f['conv_type']
+    k = f['kernel_size']
 
     if stride != 1 and conv_type in ['random', 'gaussian']:
-        raise RuntimeError(
+        raise RuntimeWarning(
             "Using transposed convolutions with strides generally works bad."
-            "Consider bilinear upsamling + transposed conv with stride 1. "
-            "If you are sure you want to use this code anyway, remove this line.")
+            "Consider bilinear upsamling + transposed conv with stride 1. ")
 
     if conv_type == 'bilinear':
         if stride != 1:
@@ -116,17 +115,14 @@ def create_fixed_conv_transpose(planes, stride, fixed_conv_params):
         if f['initialization'] == 'He':
             mean = 0
             std = math.sqrt(2 / planes)
-        elif f['initialization'] == 'DCGAN':
-            mean = 0
-            std = 0.02
         else:
             mean = f['mean']
             std = f['std']
-        fixed_conv = RandomConvTransWpad(planes, f['kernel_size'], stride, mean, std)
+
+        fixed_conv = RandomConvTransWpad(planes, k, stride, mean, std)
 
     elif conv_type == 'gaussian':
-
-        fixed_conv = GaussianLayerTransWPad(planes, f['kernel_size'], f['sigma'], stride)
+        fixed_conv = GaussianLayerTransWPad(planes, k, f['sigma'], stride)
     else:
         raise RuntimeError("Unknown kernel")
     return fixed_conv
@@ -341,7 +337,8 @@ class RandomConvWpad(nn.Module):
                  mean, std):
         super(RandomConvWpad, self).__init__()
         p1, p2 = same_padding(kernel_size, stride)
-        self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
+        # self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
+        self.pad = nn.ZeroPad2d((p1, p2, p1, p2))
         self.conv = RandomConv2d(planes, kernel_size, stride, 0,
                                  mean, std)
 
@@ -361,7 +358,8 @@ class RandomConvTransWpad(nn.Module):
         super(RandomConvTransWpad, self).__init__()
         p1, p2 = same_padding(kernel_size, stride)
         output_padding = 1 if (kernel_size-stride) % 2 == 1 else 0
-        self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
+        self.pad = nn.ZeroPad2d((p1,p2,p1,p2))
+        # self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
         if stride == 1 and output_padding == 1:
             """ There is a problem with the RandomConvTrans2d not working 
             for a combination of values k=4,s=1,o=1 
