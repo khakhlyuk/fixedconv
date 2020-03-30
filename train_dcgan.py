@@ -16,10 +16,8 @@ import matplotlib.pyplot as plt
 
 import modules.dcgan as dcgan
 from modules.functions import weights_init_dcgan
-from modules.fixedconv import get_fixed_conv_params
 
 net_type_names = ['A', 'B', 'C']
-conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True,
@@ -42,11 +40,6 @@ parser.add_argument('--net_type', default='A',
                          'B - first conv in G and last conv in D are trainable, others are fixed.'
                          'C - first and last convs in both G and D are trainable, others are fixed.'
                          'Choices: ' + ' | '.join(net_type_names))
-parser.add_argument('--conv_type', default='R',
-                    choices=conv_type_names,
-                    help='Fixed kernel types. Random weights, Gaussian filter or Bilinear interpolation etc. '
-                         'Used for fixed nets only.'
-                         'Choices: ' + ' | '.join(conv_type_names))
 parser.add_argument('--sigma', type=float, default=0.75,
                     help='Parameter sigma for the gaussian kernel.')
 parser.add_argument('--workers', type=int,
@@ -144,8 +137,9 @@ elif args.dataset == 'fake':
     dataset = dset.FakeData(image_size=(3, args.imageSize, args.imageSize),
                             transform=transforms.ToTensor())
     nc = 3
+else:
+    raise RuntimeError('Wrong dataset')
 
-assert dataset
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batchSize,
                                          shuffle=True,
                                          num_workers=args.workers)
@@ -158,30 +152,15 @@ nz *= args.kG if args.net_type == "A" else 1
 ngf = args.ngf
 ndf = args.ndf
 
-nz_hw = 1
-
-# Gaussian Layer Parameters
-fixed_conv_params = get_fixed_conv_params(
-    args.conv_type, bilin_interpol=True, kernel_size=4, sigma=args.sigma,
-    initialization='He')
-
 # Creating G and D
-if args.fixedG:
-    print(nz, ngf, nc, fixed_conv_params, args.net_type,
-                                args.kG)
-    netG = dcgan.FixedGenerator(nz, ngf, nc, fixed_conv_params, args.net_type,
-                                args.kG).to(device)
-else:
-    netG = dcgan.Generator(nz, ngf, nc).to(device)
-if args.fixedD:
-    netD = dcgan.FixedDiscriminator(nc, ndf, fixed_conv_params, args.net_type,
-                                    args.kD).to(device)
-else:
-    netD = dcgan.Discriminator(nc, ndf).to(device)
+netG = dcgan.Generator(nz, ngf, nc, args.kG, args.fixedG,
+                       args.net_type).to(device)
 
-# CHANGE if you want
+netD = dcgan.Discriminator(nc, ndf, args.kD, args.fixedD,
+                           args.net_type).to(device)
+
+# Don't initialize fixed weights
 init_fixed = False
-
 netG.apply(partial(weights_init_dcgan, init_fixed=init_fixed))
 netD.apply(partial(weights_init_dcgan, init_fixed=init_fixed))
 
@@ -193,7 +172,7 @@ if args.netD_path != '':
 
 criterion = nn.BCELoss()
 
-fixed_noise = torch.randn(64, nz, nz_hw, nz_hw, device=device)
+fixed_noise = torch.randn(64, nz, 1, 1, device=device)
 real_label = 1
 fake_label = 0
 
@@ -226,7 +205,7 @@ for epoch in range(args.num_epochs):
         D_x = output.mean().item()
 
         # train with fake
-        noise = torch.randn(batch_size, nz, nz_hw, nz_hw, device=device)
+        noise = torch.randn(batch_size, nz, 1, 1, device=device)
         fake = netG(noise)
         label.fill_(fake_label)
         output = netD(fake.detach()).view(-1)

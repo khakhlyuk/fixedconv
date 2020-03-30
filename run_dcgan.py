@@ -6,7 +6,6 @@ k_list = [(4, 4)]  # widening factors for G and D
 fixedG = True
 fixedD = True
 net_type = 'A'
-conv_type = 'R'
 
 num_epochs = 20
 workers = 2
@@ -18,11 +17,10 @@ for kG, kD in k_list:
 
     postfix = ''
 
-    outf = 'logs_dcgan/{}{}_{}{}_net{}_conv{}_{}'.format(
+    outf = 'logs_dcgan/{}{}_{}{}_net{}_{}'.format(
         'fG' if fixedG else 'G', kG,
         'fD' if fixedD else 'D', kD,
         net_type,
-        conv_type,
         postfix)
 
     commands = [
@@ -33,13 +31,12 @@ for kG, kD in k_list:
         '--kG=' + str(kG),
         '--kD=' + str(kD),
         '--net_type=' + net_type,
-        '--conv_type=' + conv_type,
         '--workers=' + str(workers),
         '--num_epochs=' + str(num_epochs),
         '--manualSeed=' + str(manualSeed),
         '--gpus=' + gpus,
-        # "--netG_path=logs_dcgan/fG3_fD3_R_reg_conv_sm2_He/netG_epoch_19.pth",
-        # # "--netD_path=logs_dcgan/fG3_fD3_R_reg_conv_sm2_He/netD_epoch_19.pth",
+        # "--netG_path=logs_dcgan/...pth",
+        # # "--netD_path=logs_dcgan/...pth",
         # '--lr=0.00002',
 
     ]

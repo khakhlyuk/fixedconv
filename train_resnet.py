@@ -2,7 +2,6 @@ import argparse
 
 from utils.data_loader import get_train_valid_loader, get_test_loader
 from utils.utils import num_params, save_summary, format_scientific
-from modules.fixedconv import get_fixed_conv_params
 
 from fastai.vision import *
 from fastai.vision.data import *
@@ -18,7 +17,6 @@ model_names = sorted(name for name in nets.__dict__
                      and "resnet" in name
                      and callable(nets.__dict__[name]))
 datasets = ['cifar10', 'cifar100', 'mnist', 'fmnist']
-conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser(description='Training resnets and fixed resnets')
 parser.add_argument('--model', '-a', required=True, metavar='MODEL',
@@ -27,26 +25,23 @@ parser.add_argument('--model', '-a', required=True, metavar='MODEL',
 parser.add_argument('--dataset', required=True,
                     choices=datasets,
                     help='datasets: ' + ' | '.join(datasets))
+parser.add_argument('-f', '--fixed',
+                    action='store_true',
+                    help='Trainable or fixed ResNet')
 parser.add_argument('--ff', '--fully_fixed',
-                    choices=['y', 'n'],
-                    help='If convolutions at stage 0 should be replaced by fixed too.'
-                         'Used for fixed resnets only'
-                         'Choices: "y", "n"')
+                    action='store_true',
+                    help='If convolutions at stage 0 should be replaced by '
+                         'fixed too.')
 parser.add_argument('-k', default=1, type=int,
                     help='widening factor k (default: 1). Used for fixed resnets only')
-parser.add_argument('--conv_type', default='R',
-                    choices=conv_type_names,
-                    help='Fixed kernel types. Random weights, Gaussian filter or Bilinear interpolation etc. '
-                         'Used for fixed resnets only.'
-                         'Choices: ' + ' | '.join(conv_type_names))
-parser.add_argument('--sigma', type=float, default=0.8,
-                    help='Parameter sigma for the gaussian kernel.')
 parser.add_argument('--data_path', default='/root/data/cifar10',
                     help='path to save downloaded data to')
 parser.add_argument('-c', '--cuda', default=0, type=int,
                     help='cuda kernel to use (default: 0)')
 parser.add_argument('--epochs', default=150, type=int,
                     help='number of total epochs to run')
+# parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
+#                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--bs', default=128, type=int,
                     metavar='N', help='mini-batch size (default: 128)')
 parser.add_argument('--lr', default=0.1, type=float,
@@ -74,9 +69,11 @@ def main():
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    cuda = args.cuda
-    k = args.k
     model_name = args.model
+    k = args.k
+    fixed = args.fixed
+    fully_fixed = args.ff
+    cuda = args.cuda
 
     if args.dataset in ['cifar10', 'mnist', 'fmnist']:
         num_classes = 10
@@ -85,26 +82,20 @@ def main():
     else:
         raise RuntimeError
 
-    if model_name.startswith("resnet"):  # for original resnets
-        model_code = model_name
-        model = nets.__dict__[model_name](num_classes=num_classes)
-    else:  # for fixed resnets
-        fully_fixed = True if args.ff == 'y' else False
-        conv_type = args.conv_type
-        fixed_conv_params = get_fixed_conv_params(
-            args.conv_type, bilin_interpol=True, kernel_size=3, sigma=args.sigma)
-
-        model_code = model_name + '(k={},type={},fully_fixed={},type={})'.format(
-            k, conv_type, fully_fixed, conv_type)
-        model = nets.__dict__[model_name](k, fully_fixed, fixed_conv_params,
-                                          num_classes)
+    if not args.fixed:
+        model_code = model_name + '(k={})'.format(k)
+    else:
+        model_code = 'fixed_' + model_name + '(k={}_ff={})'.format(
+            k, fully_fixed)
+    model = nets.__dict__[model_name](
+        num_classes=num_classes, k=k, fixed=fixed, fully_fixed=fully_fixed)
 
     save_model = True
     log = True
     write = True
 
     data_path = Path(args.data_path)
-    logs_path = Path('logs')  # relative to project directory
+    logs_path = Path('logs_resnet_new')  # relative to project directory
     model_saves_dir = Path('model_saves')
     csv_logs_dir = Path('csv_logs')
     tb_dir = Path('tensorboard')
@@ -169,7 +160,6 @@ def main():
 
     # Training
     print('Training', model_code)
-    # print(model.stage1.block0.fixed_sep_conv1.main[0].conv.fixed_conv.weight[0:3])
     learn.fit(epochs, lr=max_lr, wd=weight_decay)
     # Gathering stats and saving them
     best_epoch, best_value = learn.save_model_callback.best_epoch, learn.save_model_callback.best
