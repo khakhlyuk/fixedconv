@@ -34,12 +34,14 @@ parser.add_argument('--ff', '--fully_fixed',
                          'fixed too.')
 parser.add_argument('-k', default=1, type=int,
                     help='widening factor k (default: 1). Used for fixed resnets only')
-parser.add_argument('--data_path', default='/root/data/cifar10',
+parser.add_argument('--data_path', default='/root/data',
+                    help='path to save downloaded data to')
+parser.add_argument('--logs_path', default='./logs_resnet',
                     help='path to save downloaded data to')
 parser.add_argument('-c', '--cuda', default=0, type=int,
                     help='cuda kernel to use (default: 0)')
-parser.add_argument('--epochs', default=150, type=int,
-                    help='number of total epochs to run')
+# parser.add_argument('--epochs', default=200, type=int,
+#                     help='number of total epochs to run')
 # parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 #                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--bs', default=128, type=int,
@@ -90,26 +92,26 @@ def main():
     model = nets.__dict__[model_name](
         num_classes=num_classes, k=k, fixed=fixed, fully_fixed=fully_fixed)
 
+    early_stopping = False
     save_model = True
     log = True
     write = True
 
     data_path = Path(args.data_path)
-    logs_path = Path('logs_resnet_new')  # relative to project directory
-    model_saves_dir = Path('model_saves')
-    csv_logs_dir = Path('csv_logs')
-    tb_dir = Path('tensorboard')
+    logs_path = Path(args.logs_path)
+    model_saves_dir = Path('model_saves')  # relative to logs_path
+    csv_logs_dir = Path('csv_logs')  # relative to logs_path
+    tb_dir = Path('tensorboard')  # relative to logs_path
 
     max_lr = args.lr
     min_lr = args.min_lr
-    epochs = args.epochs
 
     momentum = args.mom
     weight_decay = args.wd
     nesterov = False
 
-    bs = args.bs  # as used in resnet paper. Takes 1.5 MB of RAM, so not an issue
-    num_workers = args.workers  # optimal for the given machine. sometimes gives an error if num_workers>0
+    bs = args.bs
+    num_workers = args.workers
     pin_memory = False  # no difference for the given machine
 
     device = torch.device("cuda:" + str(cuda) if torch.cuda.is_available() else "cpu")
@@ -135,10 +137,15 @@ def main():
 
     # Callbacks
     callback_fns = [
-        partial(ReduceLROnPlateauCallback, monitor='valid_loss', mode='auto', patience=10, factor=0.1, min_delta=0, min_lr=min_lr),
-        partial(EarlyStoppingCallback, monitor='valid_loss', min_delta=0, patience=20),
         partial(MetricTracker, func=accuracy, train=True, name='train_accu'),  # additionally track train accuracy
     ]
+    if early_stopping:
+        callback_fns.append(partial(
+            ReduceLROnPlateauCallback, monitor='valid_loss', mode='auto',
+            patience=10, factor=0.1, min_delta=0, min_lr=min_lr))
+        callback_fns.append(partial(
+            EarlyStoppingCallback, monitor='valid_loss', min_delta=0,
+            patience=20))
     if save_model: callback_fns.append(partial(
         SaveModelCallback, every='improvement', monitor='accuracy',
         mode='max', name=model_code))
@@ -152,15 +159,33 @@ def main():
     bunch = ImageDataBunch(train_loader, valid_loader, test_dl=test_loader,
                            device=device, path=data_path)
     # lr is set by fit
-    sgd = partial(torch.optim.SGD, momentum=momentum, weight_decay=weight_decay, nesterov=nesterov)
+    sgd = partial(torch.optim.SGD, momentum=momentum,
+                  weight_decay=weight_decay, nesterov=nesterov)
 
-    learn = Learner(bunch, model, loss_func=nn.CrossEntropyLoss(), opt_func=sgd, true_wd=False, wd=weight_decay,
+    learn = Learner(bunch, model, loss_func=nn.CrossEntropyLoss(),
+                    opt_func=sgd, true_wd=False, wd=weight_decay,
                     metrics=[accuracy], callback_fns=callback_fns,
                     path=logs_path, model_dir=model_saves_dir)
 
-    # Training
     print('Training', model_code)
-    learn.fit(epochs, lr=max_lr, wd=weight_decay)
+
+    # Training
+    if early_stopping:
+        # reduce on plateau + early stopping case
+        learn.fit(200, lr=max_lr, wd=weight_decay)
+    else:
+        models_to_warm_up = ['110', '164', '1001', '1202']
+        # regular step lr scheduler, as in the paper
+        if len([True for x in models_to_warm_up if x in model_name]) > 0:
+            # warmup for larger models
+            learn.fit(1, lr=max_lr * 0.1, wd=weight_decay)
+            learn.fit(99, lr=max_lr, wd=weight_decay)
+        else:
+            # no warmup
+            learn.fit(100, lr=max_lr, wd=weight_decay)
+        learn.fit(50, lr=max_lr * 0.1, wd=weight_decay)
+        learn.fit(50, lr=max_lr * 0.01, wd=weight_decay)
+
     # Gathering stats and saving them
     best_epoch, best_value = learn.save_model_callback.best_epoch, learn.save_model_callback.best
     time_to_best_epoch = learn.save_model_callback.time_to_best_epoch

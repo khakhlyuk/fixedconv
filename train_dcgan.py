@@ -22,8 +22,8 @@ net_type_names = ['A', 'B', 'C']
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True,
                     help='celeba | cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
-parser.add_argument('--dataroot', required=False, help='path to dataset')
-parser.add_argument('--outf', default='.',
+parser.add_argument('--data_path', required=False, help='path to dataset')
+parser.add_argument('--logs_path', default='./logs_dcgan',
                     help='folder to output images and model checkpoints')
 parser.add_argument('--kG', type=int,
                     help='Widening factor for the Generator.', default=1)
@@ -71,9 +71,9 @@ parser.add_argument('--classes', default='bedroom',
 args = parser.parse_args()
 print(args)
 
-outf = args.outf
+logs_path = args.logs_path
 try:
-    os.makedirs(outf)
+    os.makedirs(logs_path)
 except OSError:
     pass
 
@@ -88,13 +88,13 @@ torch.manual_seed(seed)
 
 cudnn.benchmark = True
 
-if args.dataroot is None and str(args.dataset).lower() != 'fake':
+if args.data_path is None and str(args.dataset).lower() != 'fake':
     raise ValueError(
-        "`dataroot` parameter is required for dataset \"%s\"" % args.dataset)
+        "`data_path` parameter is required for dataset \"%s\"" % args.dataset)
 
 if args.dataset in ['celeba', 'imagenet', 'folder', 'lfw']:
     # folder dataset
-    dataset = dset.ImageFolder(root=args.dataroot,
+    dataset = dset.ImageFolder(root=args.data_path,
                                transform=transforms.Compose([
                                    transforms.Resize(args.imageSize),
                                    transforms.CenterCrop(args.imageSize),
@@ -105,7 +105,7 @@ if args.dataset in ['celeba', 'imagenet', 'folder', 'lfw']:
     nc = 3
 elif args.dataset == 'lsun':
     classes = [c + '_train' for c in args.classes.split(',')]
-    dataset = dset.LSUN(root=args.dataroot, classes=classes,
+    dataset = dset.LSUN(root=args.data_path, classes=classes,
                         transform=transforms.Compose([
                             transforms.Resize(args.imageSize),
                             transforms.CenterCrop(args.imageSize),
@@ -115,7 +115,7 @@ elif args.dataset == 'lsun':
                         ]))
     nc = 3
 elif args.dataset == 'cifar10':
-    dataset = dset.CIFAR10(root=args.dataroot, download=True,
+    dataset = dset.CIFAR10(root=args.data_path, download=True,
                            transform=transforms.Compose([
                                transforms.Resize(args.imageSize),
                                transforms.ToTensor(),
@@ -125,7 +125,7 @@ elif args.dataset == 'cifar10':
     nc = 3
 
 elif args.dataset == 'mnist':
-    dataset = dset.MNIST(root=args.dataroot, download=True,
+    dataset = dset.MNIST(root=args.data_path, download=True,
                          transform=transforms.Compose([
                              transforms.Resize(args.imageSize),
                              transforms.ToTensor(),
@@ -244,19 +244,19 @@ for epoch in range(args.num_epochs):
         fake = netG(fixed_noise).detach().cpu()
     vutils.save_image(fake[:64],
                       '%s/fake_samples_epoch_%03d.png' % (
-                          outf, epoch),
+                          logs_path, epoch),
                       padding=2,
                       normalize=True,)
 
     # do checkpointing (every n epochs and on the last epoch)
     if ((epoch + 1) % checkpoint_every == 0) or (epoch == args.num_epochs-1):
-        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (outf, epoch))
-        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (outf, epoch))
+        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (logs_path, epoch))
+        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (logs_path, epoch))
 
 # Grab a batch of real images from the dataloader and save it
 real = next(iter(dataloader))[0]
 vutils.save_image(real[:64],
-                  '%s/real_samples.png' % outf,
+                  '%s/real_samples.png' % logs_path,
                   normalize=True)
 
 # Losses
@@ -267,4 +267,4 @@ plt.plot(D_losses, label="D")
 plt.xlabel("iterations")
 plt.ylabel("Loss")
 plt.legend()
-plt.savefig('%s/Losses.png' % outf)
+plt.savefig('%s/Losses.png' % logs_path)
