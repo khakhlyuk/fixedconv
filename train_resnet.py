@@ -8,6 +8,7 @@ from fastai.vision.data import *
 from fastai.callbacks import EarlyStoppingCallback, CSVLogger
 from utils.callbacks import ReduceLROnPlateauCallback, SaveModelCallback, MetricTracker
 from utils.tensorboard import LearnerTensorboardWriter
+from fastai.callbacks.general_sched import GeneralScheduler, TrainingPhase
 
 import modules.nets as nets
 
@@ -92,7 +93,7 @@ def main():
     model = nets.__dict__[model_name](
         num_classes=num_classes, k=k, fixed=fixed, fully_fixed=fully_fixed)
 
-    early_stopping = False
+    reduce_on = False
     save_model = True
     log = True
     write = True
@@ -118,8 +119,6 @@ def main():
     defaults.device = device
     model.to(device)
 
-    print("Running on", defaults.device)
-
     # Data
     train_loader, valid_loader = get_train_valid_loader(
         dataset=args.dataset,
@@ -139,13 +138,6 @@ def main():
     callback_fns = [
         partial(MetricTracker, func=accuracy, train=True, name='train_accu'),  # additionally track train accuracy
     ]
-    if early_stopping:
-        callback_fns.append(partial(
-            ReduceLROnPlateauCallback, monitor='valid_loss', mode='auto',
-            patience=10, factor=0.1, min_delta=0, min_lr=min_lr))
-        callback_fns.append(partial(
-            EarlyStoppingCallback, monitor='valid_loss', min_delta=0,
-            patience=20))
     if save_model: callback_fns.append(partial(
         SaveModelCallback, every='improvement', monitor='accuracy',
         mode='max', name=model_code))
@@ -155,10 +147,48 @@ def main():
         LearnerTensorboardWriter, base_dir=logs_path/tb_dir, name=model_code,
         stats_iters=10*train_epoch_len, hist_iters=10*train_epoch_len))
 
+    # lr schedulers
+    if reduce_on:
+        # early stopping + reduce on plateau
+        callback_fns.append(partial(
+            ReduceLROnPlateauCallback, monitor='valid_loss', mode='auto',
+            patience=10, factor=0.1, min_delta=0, min_lr=min_lr))
+        callback_fns.append(partial(
+            EarlyStoppingCallback, monitor='valid_loss', min_delta=0,
+            patience=20))
+    else:
+        # regular step lr scheduler, as in the paper
+        models_to_warm_up = ['110', '164', '1001', '1202']
+        milestones = [100, 50, 50]
+
+        # warmup for larger models
+        if len([True for x in models_to_warm_up if x in model_name]) > 0:
+            phases = [
+                TrainingPhase(train_epoch_len * 1)
+                    .schedule_hp('lr', max_lr * 0.1),
+                TrainingPhase(train_epoch_len * (milestones[0] - 1))
+                    .schedule_hp('lr', max_lr),
+                TrainingPhase(train_epoch_len * milestones[1])
+                    .schedule_hp('lr', max_lr * 0.1),
+                TrainingPhase(train_epoch_len * milestones[2])
+                    .schedule_hp('lr', max_lr * 0.01),
+            ]
+        # no warmup
+        else:
+            phases = [
+                TrainingPhase(train_epoch_len * milestones[0])
+                    .schedule_hp('lr', max_lr),
+                TrainingPhase(train_epoch_len * milestones[1])
+                    .schedule_hp('lr', max_lr * 0.1),
+                TrainingPhase(train_epoch_len * milestones[2])
+                    .schedule_hp('lr', max_lr * 0.01),
+            ]
+        callback_fns.append(partial(GeneralScheduler, phases=phases))
+
     # setting up fastai objects
     bunch = ImageDataBunch(train_loader, valid_loader, test_dl=test_loader,
                            device=device, path=data_path)
-    # lr is set by fit
+    # lr is set by fit and scheduler
     sgd = partial(torch.optim.SGD, momentum=momentum,
                   weight_decay=weight_decay, nesterov=nesterov)
 
@@ -167,29 +197,28 @@ def main():
                     metrics=[accuracy], callback_fns=callback_fns,
                     path=logs_path, model_dir=model_saves_dir)
 
+
+    print("Running on", device)
+    print("-" * 50)
     print('Training', model_code)
+    n_params, n_layers = num_params(model)
+    n_total_params, _ = num_params(model, count_fixed=True)
+    n_fixed = n_total_params - n_params
+    print("Number of trainable parameters:", n_params)
+    print("Number of fixed parameters:", n_fixed)
 
     # Training
-    if early_stopping:
-        # reduce on plateau + early stopping case
-        learn.fit(200, lr=max_lr, wd=weight_decay)
-    else:
-        models_to_warm_up = ['110', '164', '1001', '1202']
-        # regular step lr scheduler, as in the paper
-        if len([True for x in models_to_warm_up if x in model_name]) > 0:
-            # warmup for larger models
-            learn.fit(1, lr=max_lr * 0.1, wd=weight_decay)
-            learn.fit(99, lr=max_lr, wd=weight_decay)
-        else:
-            # no warmup
-            learn.fit(100, lr=max_lr, wd=weight_decay)
-        learn.fit(50, lr=max_lr * 0.1, wd=weight_decay)
-        learn.fit(50, lr=max_lr * 0.01, wd=weight_decay)
+    learn.fit(200, lr=max_lr, wd=weight_decay)
 
     # Gathering stats and saving them
     best_epoch, best_value = learn.save_model_callback.best_epoch, learn.save_model_callback.best
     time_to_best_epoch = learn.save_model_callback.time_to_best_epoch
-    changed_lr_on_epochs = learn.reduce_lr_on_plateau_callback.changed_lr_on_epochs
+
+    if reduce_on:
+        changed_lr_on_epochs = learn.reduce_lr_on_plateau_callback\
+            .changed_lr_on_epochs.keys()
+    else:
+        changed_lr_on_epochs = milestones
 
     print("Best model was found at epoch {} with accuracy value {:.4f} in {:.2f} seconds.".format(best_epoch, best_value, time_to_best_epoch))
 
@@ -198,22 +227,22 @@ def main():
     loss_test,  accu_test  = learn.validate(dl=learn.data.test_dl)
     # accu_train, accu_valid, accu_test = accu_train.item(), accu_valid.item(), accu_test.item()
 
-    n_params, n_layers = num_params(model)
-
     val_dict = {'name': model_code,
                 'accu_test': accu_test * 100,
                 'n_params': n_params,
+                'n_fixed': n_fixed,
+                'n_total': n_total_params,
                 'epochs': best_epoch + 1,
                 'time': time_to_best_epoch,
-                'changed_lr_on': ','.join(map(format_scientific, changed_lr_on_epochs.keys())),
+                'time_per_epoch': time_to_best_epoch / (best_epoch + 1),
+                'changed_lr_on': changed_lr_on_epochs,
                 'loss_train': loss_train,
                 'loss_valid': loss_valid,
                 'loss_test':  loss_test,
                 'accu_train': accu_train * 100,
                 'accu_valid': accu_valid * 100,
                 'accu_test (again)': accu_test * 100,
-                'other': '',
-               }
+                'other': ''}
 
     save_summary(logs_path/'models_summary.csv', val_dict)
 

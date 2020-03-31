@@ -5,7 +5,8 @@ import copy
 from pathlib import Path
 
 
-def num_params(model, count_fixed=False, display_all_modules=False):
+def num_params(model, count_fixed=False, display_all_modules=False,
+               print_stats=False):
     """Counts number of parameters and layers in the model
 
     _exclude_from_layer_count contains names that shouldn't be counted
@@ -34,12 +35,13 @@ def num_params(model, count_fixed=False, display_all_modules=False):
                     total_num_layers += 1
         else:
             num_params = 0
-        if display_all_modules: print("{}: {}".format(n, num_params))
+        if print_stats and display_all_modules: print("{}: {}".format(n, num_params))
         total_num_params += num_params
-    print("-" * 50)
-    print("Total number of parameters: {:.2e}".format(total_num_params))
-    print("-" * 50)
-    print("Total number of layers: {}".format(total_num_layers))
+    if print_stats:
+        print("-" * 50)
+        print("Total number of parameters: {:.2e}".format(total_num_params))
+        print("-" * 50)
+        print("Total number of layers: {}".format(total_num_layers))
     return total_num_params, total_num_layers
 
 

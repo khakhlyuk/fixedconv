@@ -7,6 +7,7 @@ In this work, I replace standard convolutions with fixed separable convolutions 
 Complete list of references and credits will be added later.
 The main sources are:
 - https://github.com/akamaster/pytorch_resnet_cifar10
+- https://github.com/hysts/pytorch_image_classification
 - https://github.com/pytorch/examples/tree/master/dcgan
 
 
