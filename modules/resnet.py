@@ -62,6 +62,7 @@ class ShortcutConnection(nn.Module):
 
 
 class BasicBlock(nn.Module):
+    expansion = 1
 
     def __init__(self, in_channels, out_channels, stride=1, fixed=False):
         super(BasicBlock, self).__init__()
@@ -153,9 +154,12 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
 
         # number of channels in each stage
-        n_channels = [16, 32, 64]
-        # adding widening factor k
-        n_channels = [x * k for x in n_channels]
+        base_channels = 16
+        n_channels = [base_channels * 1 * k,
+                      base_channels * 1 * k * block_module.expansion,
+                      base_channels * 2 * k * block_module.expansion,
+                      base_channels * 4 * k * block_module.expansion]
+        n_channels = [int(x) for x in n_channels]  # for float k
 
         # we only fix the first conv in fully_fixed network
         if fixed and fully_fixed:
@@ -168,17 +172,17 @@ class ResNet(nn.Module):
         self.bn = nn.BatchNorm2d(n_channels[0])
         self.relu = nn.ReLU()
         self.stage1 = self._make_stage(block_module, n_blocks[0],
-                                       n_channels[0], n_channels[0], stride=1,
+                                       n_channels[0], n_channels[1], stride=1,
                                        fixed=fixed)
         self.stage2 = self._make_stage(block_module, n_blocks[1],
-                                       n_channels[0], n_channels[1], stride=2,
+                                       n_channels[1], n_channels[2], stride=2,
                                        fixed=fixed)
         self.stage3 = self._make_stage(block_module, n_blocks[2],
-                                       n_channels[1], n_channels[2], stride=2,
+                                       n_channels[2], n_channels[3], stride=2,
                                        fixed=fixed)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.flatten = nn.Flatten()
-        self.fc = nn.Linear(n_channels[2], num_classes)
+        self.fc = nn.Linear(n_channels[3], num_classes)
 
     def _make_stage(self, block_module, n_blocks, in_channels, out_channels,
                     stride, fixed):

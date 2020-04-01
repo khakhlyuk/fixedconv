@@ -33,7 +33,7 @@ parser.add_argument('--ff', '--fully_fixed',
                     action='store_true',
                     help='If convolutions at stage 0 should be replaced by '
                          'fixed too.')
-parser.add_argument('-k', default=1, type=int,
+parser.add_argument('-k', default=1, type=float,
                     help='widening factor k (default: 1). Used for fixed resnets only')
 parser.add_argument('--data_path', default='/root/data',
                     help='path to save downloaded data to')
