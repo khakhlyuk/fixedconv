@@ -5,6 +5,15 @@ import copy
 from pathlib import Path
 
 
+def format_number_km(x):
+    if x > 1e6:
+        return str(int(x / 1e6)) + 'M'
+    elif x > 1e3:
+        return str(int(x / 1e3)) + 'K'
+    else:
+        return str(x)
+
+
 def num_params(model, count_fixed=False, display_all_modules=False,
                print_stats=False):
     """Counts number of parameters and layers in the model

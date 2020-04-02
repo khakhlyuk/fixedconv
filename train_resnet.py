@@ -1,7 +1,7 @@
 import argparse
 
 from utils.data_loader import get_train_valid_loader, get_test_loader
-from utils.utils import num_params, save_summary, format_scientific
+from utils.utils import num_params, save_summary, format_scientific, format_number_km
 
 from fastai.vision import *
 from fastai.vision.data import *
@@ -227,11 +227,12 @@ def main():
     loss_test,  accu_test  = learn.validate(dl=learn.data.test_dl)
     # accu_train, accu_valid, accu_test = accu_train.item(), accu_valid.item(), accu_test.item()
 
+
     val_dict = {'name': model_code,
                 'accu_test': accu_test * 100,
-                'n_params': n_params,
-                'n_fixed': n_fixed,
-                'n_total': n_total_params,
+                'n_params': format_number_km(n_params),
+                'n_fixed': format_number_km(n_fixed),
+                'n_total': format_number_km(n_total_params),
                 'epochs': best_epoch + 1,
                 'time': time_to_best_epoch,
                 'time_per_epoch': time_to_best_epoch / (best_epoch + 1),
