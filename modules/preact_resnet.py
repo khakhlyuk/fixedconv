@@ -103,17 +103,83 @@ class PreActBottleneckBlock(nn.Module):
         return y
 
 
+class FixedBottleneckBlock(nn.Module):
+    """A fixed version of the bottleneck block.
+     Regular has 1x1 conv + 3x3 conv + 1x1 conv
+     with n_channnels: 4*n -> n -> 4*n
+
+     This has 1x1 conv + 3x3 depthwise conv with fixed kernels + 1x1 conv
+     with n_channels: n -> factor*n -> n
+     Depthwise convs are way cheaper computationally than 1x1 convs and
+     there is no reason to limit n_channels for 3x3 conv. We try several
+     configurations of factor.
+
+     We implement 1x1 conv + 3x3 fixed depthwise conv + 1x1 conv through
+     1x1 conv + fixed separable conv, which is equivalent.
+     """
+    expansion = 1
+
+    def __init__(self, in_channels, out_channels, stride, fixed=True,
+                 preact=False, factor=1):
+        super(FixedBottleneckBlock, self).__init__()
+
+        # choose fixed or trainable
+        if fixed:
+            conv_module = RandomFixedSeparableConv2d
+        else:
+            raise RuntimeError('This block should be used with fixed=True')
+
+        bottleneck_channels = int(out_channels * factor)
+
+        self._preact = preact
+
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        # 1x1 conv
+        self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, kernel_size=1,
+                               stride=1, padding=0, bias=False)
+        self.bn2 = nn.BatchNorm2d(bottleneck_channels)
+        # 3x3 fixed depthwise conv + 1x1 conv
+        self.conv2 = conv_module(bottleneck_channels, out_channels, kernel_size=3,
+                                 stride=stride, padding=1, bias=False)
+
+        self.shortcut = nn.Sequential()  # identity
+        if in_channels != out_channels:
+            self.shortcut.add_module('conv', nn.Conv2d(
+                in_channels, out_channels, kernel_size=1,
+                stride=stride, padding=0, bias=False))
+
+    def forward(self, x):
+        if self._preact:
+            x = F.relu(self.bn1(x), inplace=True)  # shortcut after preactivation
+            y = self.conv1(x)
+        else:
+            # preactivation only for residual path
+            y = F.relu(self.bn1(x), inplace=True)
+            y = self.conv1(y)
+
+        y = F.relu(self.bn2(y), inplace=True)
+        y = self.conv2(y)
+
+        y += self.shortcut(x)
+        return y
+
+
 class PreActResNet(nn.Module):
     def __init__(self, block_module, n_blocks, num_classes=10, k=1,
                  fixed=False, fully_fixed=False):
         super(PreActResNet, self).__init__()
 
         # number of channels in each stage
+
         base_channels = 16
-        n_channels = [base_channels * 1 * k,
-                      base_channels * 1 * k * block_module.expansion,
-                      base_channels * 2 * k * block_module.expansion,
-                      base_channels * 4 * k * block_module.expansion]
+        try:
+            expansion = block_module.expansion
+        except AttributeError:
+            expansion = 1
+        n_channels = [base_channels * 1,  # TODO: put k back in
+                      base_channels * 1 * k * expansion,
+                      base_channels * 2 * k * expansion,
+                      base_channels * 4 * k * expansion]
         n_channels = [int(x) for x in n_channels]  # for float k
 
         if fixed and fully_fixed:
