@@ -234,7 +234,7 @@ def main():
                 'n_fixed': format_number_km(n_fixed),
                 'n_total': format_number_km(n_total_params),
                 'epochs': best_epoch + 1,
-                'time': time_to_best_epoch,
+                'time': round(time_to_best_epoch / 3600, 2),
                 'time_per_epoch': time_to_best_epoch / (best_epoch + 1),
                 'changed_lr_on': changed_lr_on_epochs,
                 'loss_train': loss_train,

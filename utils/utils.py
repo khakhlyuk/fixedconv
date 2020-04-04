@@ -7,9 +7,9 @@ from pathlib import Path
 
 def format_number_km(x):
     if x > 1e6:
-        return str(int(x / 1e6)) + 'M'
+        return str(round(x / 1e6,2)) + 'M'
     elif x > 1e3:
-        return str(int(x / 1e3)) + 'K'
+        return str(round(x / 1e3)) + 'K'
     else:
         return str(x)
 
