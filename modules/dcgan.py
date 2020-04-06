@@ -82,11 +82,12 @@ class FixedGenerator(nn.Module):
 
         if net_type == "A":
             ngf = ngf * k
-            f = fixed_conv_params
             self.main = nn.Sequential(
                 # input is Z. nz x 1 x 1
                 nn.Conv2d(nz, ngf * 8, kernel_size=1, stride=1, padding=0,
                           bias=False),
+
+                # !!! change this if needed
                 RandomConvTrans2d(ngf * 8, 4, 1, 0, 0, 0, 0.02),  # random
                 # GaussianLayerTrans(ngf * 8, 4, f['sigma'], 1, 0, 0),  # gaussian
                 # nn.UpsamplingBilinear2d(scale_factor=4),  # bilinear
@@ -123,37 +124,14 @@ class FixedGenerator(nn.Module):
             self.main = nn.Sequential(
                 # input is Z. nz x 1 x 1
 
-                nn.ConvTranspose2d( nz, ngf_nok * 8, 4, 1, 0, bias=False),
-                nn.BatchNorm2d(ngf_nok * 8),
-                nn.ReLU(True),
-                # state size. (ngf*8) x 4 x 4
+                nn.Conv2d(nz, ngf * 8, kernel_size=1, stride=1, padding=0,
+                          bias=False),
 
-                FixedSeparableConvTrans2d(ngf_nok * 8, ngf * 4, 2, fixed_conv_params),
-                nn.BatchNorm2d(ngf * 4),
-                nn.ReLU(True),
-                # state size. (ngf*4) x 8 x 8
+                # !!! change this if needed
+                RandomConvTrans2d(ngf * 8, 4, 1, 0, 0, 0, 0.02),  # random
+                # GaussianLayerTrans(ngf * 8, 4, f['sigma'], 1, 0, 0),  # gaussian
+                # nn.UpsamplingBilinear2d(scale_factor=4),  # bilinear
 
-                FixedSeparableConvTrans2d(ngf * 4, ngf * 2, 2, fixed_conv_params),
-                nn.BatchNorm2d(ngf * 2),
-                nn.ReLU(True),
-                # state size. (ngf*2) x 16 x 16
-
-                FixedSeparableConvTrans2d(ngf * 2, ngf * 1, 2, fixed_conv_params),
-                nn.BatchNorm2d(ngf * 1),
-                nn.ReLU(True),
-                # state size. (ngf) x 32 x 32
-
-                FixedSeparableConvTrans2d(ngf * 1, nc, 2, fixed_conv_params),
-                nn.Tanh()
-                # state size. (nc) x 64 x 64
-            )
-        elif net_type == "C":
-            ngf_nok = ngf
-            ngf = ngf * k
-            self.main = nn.Sequential(
-                # input is Z. nz x 1 x 1
-
-                nn.ConvTranspose2d(nz, ngf_nok * 8, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(ngf_nok * 8),
                 nn.ReLU(True),
                 # state size. (ngf*8) x 4 x 4
@@ -196,7 +174,6 @@ class FixedDiscriminator(nn.Module):
 
         if net_type == "A":
             ndf = ndf * k
-            f = fixed_conv_params
             self.main = nn.Sequential(
                 # x is (nc) x 64 x 64
                 FixedSeparableConv2d(nc, ndf * 1, 2, fixed_conv_params),
@@ -218,6 +195,8 @@ class FixedDiscriminator(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
                 # state size. (ndf*8) x 4 x 4
 
+
+                # !!! change this if needed
                 RandomConv2d(ndf * 8, 4, 1, 0, 0, 0.02),  # random
                 # GaussianLayer(ndf * 8, 4, f['sigma'], 1, 0),  # gaussian
                 # nn.AdaptiveAvgPool2d(1),  # bilinear
@@ -226,33 +205,6 @@ class FixedDiscriminator(nn.Module):
                 nn.Sigmoid()
             )
         elif net_type == "B":
-            ndf_nok = ndf
-            ndf = ndf * k
-            self.main = nn.Sequential(
-                # x is (nc) x 64 x 64
-                FixedSeparableConv2d(nc, ndf * 1, 2, fixed_conv_params),
-                nn.LeakyReLU(0.2, inplace=True),
-                # state size. (ndf) x 32 x 32
-
-                FixedSeparableConv2d(ndf * 1, ndf * 2, 2, fixed_conv_params),
-                nn.BatchNorm2d(ndf * 2),
-                nn.LeakyReLU(0.2, inplace=True),
-                # state size. (ndf*2) x 16 x 16
-
-                FixedSeparableConv2d(ndf * 2, ndf * 4, 2, fixed_conv_params),
-                nn.BatchNorm2d(ndf * 4),
-                nn.LeakyReLU(0.2, inplace=True),
-                # state size. (ndf*4) x 8 x 8
-
-                FixedSeparableConv2d(ndf * 4, ndf_nok * 8, 2, fixed_conv_params),
-                nn.BatchNorm2d(ndf_nok * 8),
-                nn.LeakyReLU(0.2, inplace=True),
-                # state size. (ndf*8) x 4 x 4
-
-                nn.Conv2d(ndf_nok * 8, 1, 4, 1, 0, bias=False),
-                nn.Sigmoid()
-            )
-        elif net_type == "C":
             ndf_nok = ndf
             ndf = ndf * k
             self.main = nn.Sequential(
@@ -276,7 +228,12 @@ class FixedDiscriminator(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
                 # state size. (ndf*8) x 4 x 4
 
-                nn.Conv2d(ndf_nok * 8, 1, 4, 1, 0, bias=False),
+                # !!! change this if needed
+                RandomConv2d(ndf * 8, 4, 1, 0, 0, 0.02),  # random
+                # GaussianLayer(ndf * 8, 4, f['sigma'], 1, 0),  # gaussian
+                # nn.AdaptiveAvgPool2d(1),  # bilinear
+                nn.Conv2d(ndf * 8, 1, kernel_size=1, stride=1, padding=0,
+                          bias=False),
                 nn.Sigmoid()
             )
 

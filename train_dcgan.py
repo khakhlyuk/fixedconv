@@ -18,14 +18,15 @@ import modules.dcgan as dcgan
 from modules.functions import weights_init_dcgan
 from modules.fixedconv import get_fixed_conv_params
 
-net_type_names = ['A', 'B', 'C']
+from utils.utils import num_params, format_number_km
+net_type_names = ['A', 'B']
 conv_type_names = ['R', 'G', 'B']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True,
                     help='celeba | cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
-parser.add_argument('--dataroot', required=False, help='path to dataset')
-parser.add_argument('--outf', default='.',
+parser.add_argument('--data_path', required=False, help='path to dataset')
+parser.add_argument('--logs_path', default='./logs_dcgan',
                     help='folder to output images and model checkpoints')
 parser.add_argument('--kG', type=int,
                     help='Widening factor for the Generator.', default=1)
@@ -39,8 +40,8 @@ parser.add_argument('--net_type', default='A',
                     choices=net_type_names,
                     help='Type of a fixed DCGAN to use'
                          'A - all convs are fixed. '
-                         'B - first conv in G and last conv in D are trainable, others are fixed.'
-                         'C - first and last convs in both G and D are trainable, others are fixed.'
+                         'B - last conv in G and first conv in D are trainable, '
+                         'others are fixed.'
                          'Choices: ' + ' | '.join(net_type_names))
 parser.add_argument('--conv_type', default='R',
                     choices=conv_type_names,
@@ -57,8 +58,8 @@ parser.add_argument('--imageSize', type=int, default=64,
                     help='the height / width of the input image to network')
 parser.add_argument('--nz', type=int, default=100,
                     help='size of the latent z vector')
-parser.add_argument('--ngf', type=int, default=64)
-parser.add_argument('--ndf', type=int, default=64)
+parser.add_argument('--ngf', type=int, default=128)
+parser.add_argument('--ndf', type=int, default=128)
 parser.add_argument('--num_epochs', type=int, default=25,
                     help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002,
@@ -78,9 +79,9 @@ parser.add_argument('--classes', default='bedroom',
 args = parser.parse_args()
 print(args)
 
-outf = args.outf
+logs_path = args.logs_path
 try:
-    os.makedirs(outf)
+    os.makedirs(logs_path)
 except OSError:
     pass
 
@@ -95,13 +96,13 @@ torch.manual_seed(seed)
 
 cudnn.benchmark = True
 
-if args.dataroot is None and str(args.dataset).lower() != 'fake':
+if args.data_path is None and str(args.dataset).lower() != 'fake':
     raise ValueError(
-        "`dataroot` parameter is required for dataset \"%s\"" % args.dataset)
+        "`data_path` parameter is required for dataset \"%s\"" % args.dataset)
 
 if args.dataset in ['celeba', 'imagenet', 'folder', 'lfw']:
     # folder dataset
-    dataset = dset.ImageFolder(root=args.dataroot,
+    dataset = dset.ImageFolder(root=args.data_path,
                                transform=transforms.Compose([
                                    transforms.Resize(args.imageSize),
                                    transforms.CenterCrop(args.imageSize),
@@ -112,7 +113,7 @@ if args.dataset in ['celeba', 'imagenet', 'folder', 'lfw']:
     nc = 3
 elif args.dataset == 'lsun':
     classes = [c + '_train' for c in args.classes.split(',')]
-    dataset = dset.LSUN(root=args.dataroot, classes=classes,
+    dataset = dset.LSUN(root=args.data_path, classes=classes,
                         transform=transforms.Compose([
                             transforms.Resize(args.imageSize),
                             transforms.CenterCrop(args.imageSize),
@@ -122,7 +123,7 @@ elif args.dataset == 'lsun':
                         ]))
     nc = 3
 elif args.dataset == 'cifar10':
-    dataset = dset.CIFAR10(root=args.dataroot, download=True,
+    dataset = dset.CIFAR10(root=args.data_path, download=True,
                            transform=transforms.Compose([
                                transforms.Resize(args.imageSize),
                                transforms.ToTensor(),
@@ -132,7 +133,7 @@ elif args.dataset == 'cifar10':
     nc = 3
 
 elif args.dataset == 'mnist':
-    dataset = dset.MNIST(root=args.dataroot, download=True,
+    dataset = dset.MNIST(root=args.data_path, download=True,
                          transform=transforms.Compose([
                              transforms.Resize(args.imageSize),
                              transforms.ToTensor(),
@@ -144,8 +145,9 @@ elif args.dataset == 'fake':
     dataset = dset.FakeData(image_size=(3, args.imageSize, args.imageSize),
                             transform=transforms.ToTensor())
     nc = 3
+else:
+    raise RuntimeError('Wrong dataset')
 
-assert dataset
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batchSize,
                                          shuffle=True,
                                          num_workers=args.workers)
@@ -154,7 +156,7 @@ gpus = [('cuda:' + x) for x in args.gpus.split(',')]
 device = torch.device(gpus[0] if torch.cuda.is_available() else "cpu")
 
 nz  = args.nz
-nz *= args.kG if args.net_type == "A" else 1
+nz *= args.kG if args.fixedG else 1
 ngf = args.ngf
 ndf = args.ndf
 
@@ -181,7 +183,6 @@ else:
 
 # CHANGE if you want
 init_fixed = False
-
 netG.apply(partial(weights_init_dcgan, init_fixed=init_fixed))
 netD.apply(partial(weights_init_dcgan, init_fixed=init_fixed))
 
@@ -193,7 +194,7 @@ if args.netD_path != '':
 
 criterion = nn.BCELoss()
 
-fixed_noise = torch.randn(64, nz, nz_hw, nz_hw, device=device)
+fixed_noise = torch.randn(64, nz, 1, 1, device=device)
 real_label = 1
 fake_label = 0
 
@@ -207,7 +208,23 @@ D_losses = []
 iters = 0
 
 # Change if you want to checkpoint more often
-checkpoint_every = args.num_epochs // 2
+checkpoint_every = args.num_epochs // 4
+
+n_params_G, n_layers_G = num_params(netG)
+n_params_D, n_layers_D = num_params(netD)
+n_total_params_G, _ = num_params(netG, count_fixed=True)
+n_total_params_D, _ = num_params(netD, count_fixed=True)
+n_fixed_G = n_total_params_G - n_params_G
+n_fixed_D = n_total_params_D - n_params_D
+print("G: trainable, fixed, layers",
+      format_number_km(n_params_G),
+      format_number_km(n_fixed_G),
+      n_layers_G)
+print("D: trainable, fixed, layers",
+      format_number_km(n_params_D),
+      format_number_km(n_fixed_D),
+      n_layers_D)
+
 
 for epoch in range(args.num_epochs):
     for i, data in enumerate(dataloader, 0):
@@ -226,7 +243,7 @@ for epoch in range(args.num_epochs):
         D_x = output.mean().item()
 
         # train with fake
-        noise = torch.randn(batch_size, nz, nz_hw, nz_hw, device=device)
+        noise = torch.randn(batch_size, nz, 1, 1, device=device)
         fake = netG(noise)
         label.fill_(fake_label)
         output = netD(fake.detach()).view(-1)
@@ -265,19 +282,19 @@ for epoch in range(args.num_epochs):
         fake = netG(fixed_noise).detach().cpu()
     vutils.save_image(fake[:64],
                       '%s/fake_samples_epoch_%03d.png' % (
-                          outf, epoch),
+                          logs_path, epoch),
                       padding=2,
                       normalize=True,)
 
     # do checkpointing (every n epochs and on the last epoch)
     if ((epoch + 1) % checkpoint_every == 0) or (epoch == args.num_epochs-1):
-        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (outf, epoch))
-        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (outf, epoch))
+        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (logs_path, epoch))
+        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (logs_path, epoch))
 
 # Grab a batch of real images from the dataloader and save it
 real = next(iter(dataloader))[0]
 vutils.save_image(real[:64],
-                  '%s/real_samples.png' % outf,
+                  '%s/real_samples.png' % logs_path,
                   normalize=True)
 
 # Losses
@@ -288,4 +305,4 @@ plt.plot(D_losses, label="D")
 plt.xlabel("iterations")
 plt.ylabel("Loss")
 plt.legend()
-plt.savefig('%s/Losses.png' % outf)
+plt.savefig('%s/Losses.png' % logs_path)

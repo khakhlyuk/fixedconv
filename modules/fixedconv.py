@@ -14,14 +14,13 @@ from abc import ABC, abstractmethod
 
 
 def get_fixed_conv_params(conv_type, bilin_interpol=False, kernel_size=None,
-                          mean=None, std=None, initialization=None, sigma=None, amount=None):
+                          mean=None, std=None, initialization=None, sigma=None):
     """
 
     Args:
         conv_type (str): first letter specifies the type of filter to use.
             G - Gaussian
             B - Bilinear interpolation
-            S - Sharpening
             R - Random
         bilin_interpol (bool): if True, interpolate with bilinear
             interpolation and then use conv with stride 1,
@@ -32,8 +31,6 @@ def get_fixed_conv_params(conv_type, bilin_interpol=False, kernel_size=None,
         initialization (str): for random filter 'He' will do He initialization,
             otherwise mean and std will be used.
         sigma (float): for gaussian and sharpening kernels - sigma, standard deviation.
-        amount (float): amount of sharpening to apply.
-            Check https://en.wikipedia.org/wiki/Unsharp_masking for details
 
 
     Returns:
@@ -318,7 +315,7 @@ class GaussianLayerTransWPad(nn.Module):
             for a combination of values k=4,s=1,o=1 
             Regular GaussianLayer is equivalent for s=1 and can be used here"""
             self.conv = GaussianLayer(
-                planes, kernel_size, sigma, stride, padding=0)
+                planes, kernel_size, sigma, 1, 0)
         else:  # for stride > 1 it works fine
             self.conv = GaussianLayerTrans(
                 planes, kernel_size, sigma, stride,
@@ -337,7 +334,6 @@ class RandomConvWpad(nn.Module):
                  mean, std):
         super(RandomConvWpad, self).__init__()
         p1, p2 = same_padding(kernel_size, stride)
-        # self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
         self.pad = nn.ZeroPad2d((p1, p2, p1, p2))
         self.conv = RandomConv2d(planes, kernel_size, stride, 0,
                                  mean, std)
@@ -359,13 +355,12 @@ class RandomConvTransWpad(nn.Module):
         p1, p2 = same_padding(kernel_size, stride)
         output_padding = 1 if (kernel_size-stride) % 2 == 1 else 0
         self.pad = nn.ZeroPad2d((p1,p2,p1,p2))
-        # self.pad = nn.ReflectionPad2d((p1, p2, p1, p2))
         if stride == 1 and output_padding == 1:
             """ There is a problem with the RandomConvTrans2d not working 
             for a combination of values k=4,s=1,o=1 
             Regular RandomConv2d is equivalent for s=1 and can be used here"""
             self.conv = RandomConv2d(
-                planes, kernel_size, stride, 0,
+                planes, kernel_size, 1, 0,
                 mean, std)
         else:  # for stride > 1 it works fine
             self.conv = RandomConvTrans2d(
