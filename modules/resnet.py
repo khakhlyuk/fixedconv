@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torchvision
 import math
 
-from modules.randomconv import *
+from modules.fixedconv import *
 
 
 class ShortcutConnection(nn.Module):

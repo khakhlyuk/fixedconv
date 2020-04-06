@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 
 import modules.dcgan as dcgan
 from modules.functions import weights_init_dcgan
+from utils.utils import num_params, format_number_km
 
-net_type_names = ['A', 'B', 'C']
+net_type_names = ['A', 'B']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True,
@@ -37,11 +38,9 @@ parser.add_argument('--net_type', default='A',
                     choices=net_type_names,
                     help='Type of a fixed DCGAN to use'
                          'A - all convs are fixed. '
-                         'B - first conv in G and last conv in D are trainable, others are fixed.'
-                         'C - first and last convs in both G and D are trainable, others are fixed.'
+                         'B - last conv in G and first conv in D are trainable, '
+                         'others are fixed.'
                          'Choices: ' + ' | '.join(net_type_names))
-parser.add_argument('--sigma', type=float, default=0.75,
-                    help='Parameter sigma for the gaussian kernel.')
 parser.add_argument('--workers', type=int,
                     help='number of data loading workers', default=4)
 parser.add_argument('--batchSize', type=int, default=128,
@@ -50,8 +49,8 @@ parser.add_argument('--imageSize', type=int, default=64,
                     help='the height / width of the input image to network')
 parser.add_argument('--nz', type=int, default=100,
                     help='size of the latent z vector')
-parser.add_argument('--ngf', type=int, default=64)
-parser.add_argument('--ndf', type=int, default=64)
+parser.add_argument('--ngf', type=int, default=128)
+parser.add_argument('--ndf', type=int, default=128)
 parser.add_argument('--num_epochs', type=int, default=25,
                     help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002,
@@ -148,7 +147,7 @@ gpus = [('cuda:' + x) for x in args.gpus.split(',')]
 device = torch.device(gpus[0] if torch.cuda.is_available() else "cpu")
 
 nz  = args.nz
-nz *= args.kG if args.net_type == "A" else 1
+nz *= args.kG if args.fixedG else 1
 ngf = args.ngf
 ndf = args.ndf
 
@@ -186,7 +185,23 @@ D_losses = []
 iters = 0
 
 # Change if you want to checkpoint more often
-checkpoint_every = args.num_epochs // 2
+checkpoint_every = args.num_epochs // 4
+
+n_params_G, n_layers_G = num_params(netG)
+n_params_D, n_layers_D = num_params(netD)
+n_total_params_G, _ = num_params(netG, count_fixed=True)
+n_total_params_D, _ = num_params(netD, count_fixed=True)
+n_fixed_G = n_total_params_G - n_params_G
+n_fixed_D = n_total_params_D - n_params_D
+print("G: trainable, fixed, layers",
+      format_number_km(n_params_G),
+      format_number_km(n_fixed_G),
+      n_layers_G)
+print("D: trainable, fixed, layers",
+      format_number_km(n_params_D),
+      format_number_km(n_fixed_D),
+      n_layers_D)
+
 
 for epoch in range(args.num_epochs):
     for i, data in enumerate(dataloader, 0):

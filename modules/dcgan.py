@@ -1,13 +1,87 @@
 import torch
 import torch.nn as nn
-from modules.randomconv import *
+from modules.fixedconv import *
+
+
+class DCGANFixedLayer(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2,
+                 padding=1, bias=False):
+        super(DCGANFixedLayer, self).__init__()
+
+        assert kernel_size == 4 and bias == False and \
+            (stride == 2 and padding == 1 or stride == 1 and padding == 0)
+
+        # last layer of D
+        if stride == 1:
+            self.inter = nn.Identity()
+            self.pad = nn.Identity()
+            # fixed depthwise conv
+            self.fixed_conv = RandomFixedConv2d(in_channels, in_channels,
+                                                4, 1, 0, bias=False,
+                                                groups=in_channels)
+            self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1,
+                                     stride=1, padding=0, bias=False)
+        # all other layers of D
+        elif stride == 2:
+            self.inter = nn.AvgPool2d(2, 2)
+            self.pad = nn.ZeroPad2d((1, 2, 1, 2))
+            # fixed depthwise conv
+            self.fixed_conv = RandomFixedConv2d(in_channels, in_channels,
+                                                4, 1, 0, bias=False,
+                                                groups=in_channels)
+            self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1,
+                                     stride=1, padding=0, bias=False)
+        else:
+            raise RuntimeError
+
+    def forward(self, x):
+        x = self.fixed_conv(self.pad(self.inter(x)))
+        x = self.conv1x1(x)
+        return x
+
+
+class DCGANFixedLayerTrans(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2,
+                 padding=1, bias=False):
+        super(DCGANFixedLayerTrans, self).__init__()
+
+        assert kernel_size == 4 and bias == False and \
+            (stride == 2 and padding == 1 or stride == 1 and padding == 0)
+
+        # first layer of G
+        if stride == 1:
+            self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1,
+                                     stride=1, padding=0, bias=False)
+            self.inter = nn.Identity()
+            self.pad = nn.Identity()
+            # fixed depthwise conv
+            self.fixed_conv = RandomFixedConvTrans2d(out_channels, out_channels,
+                                                     4, 1, 0, bias=False,
+                                                     groups=out_channels)
+        # other layers of G
+        elif stride == 2:
+            self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1,
+                                     stride=1, padding=0, bias=False)
+            self.inter = nn.UpsamplingBilinear2d(scale_factor=2)
+            self.pad = nn.ZeroPad2d((1, 2, 1, 2))
+            # fixed depthwise conv
+            self.fixed_conv = RandomFixedConv2d(out_channels, out_channels,
+                                                4, 1, 0, bias=False,
+                                                groups=out_channels)
+        else:
+            raise RuntimeError
+
+    def forward(self, x):
+        x = self.conv1x1(x)
+        x = self.fixed_conv(self.pad(self.inter(x)))
+        return x
 
 
 class Generator(nn.Module):
     def __init__(self, nz, ngf, nc, k=1, fixed=False, fixed_option='A'):
         super(Generator, self).__init__()
 
-        assert fixed_option in ['A', 'B', 'C']
+        assert fixed_option in ['A', 'B']
 
         if not fixed:
             # all convs are trainable
@@ -20,26 +94,20 @@ class Generator(nn.Module):
         elif fixed and fixed_option == 'A':
             # all convs are fixed
             n_channels = [ngf * 8 * k, ngf * 4 * k, ngf * 2 * k, ngf * 1 * k]
-            conv_module1 = RandomFixedSeparableConvTrans2d
-            conv_module2 = RandomFixedSeparableConvTrans2d
-            conv_module3 = RandomFixedSeparableConvTrans2d
-            conv_module4 = RandomFixedSeparableConvTrans2d
-            conv_module5 = RandomFixedSeparableConvTrans2d
+            conv_module1 = DCGANFixedLayerTrans
+            conv_module2 = DCGANFixedLayerTrans
+            conv_module3 = DCGANFixedLayerTrans
+            conv_module4 = DCGANFixedLayerTrans
+            conv_module5 = DCGANFixedLayerTrans
         elif fixed and fixed_option == 'B':
-            # first conv is trainable, others are fixed
-            n_channels = [ngf * 8 * 1, ngf * 4 * k, ngf * 2 * k, ngf * 1 * k]
-            conv_module1 = nn.ConvTranspose2d
-            conv_module2 = RandomFixedSeparableConvTrans2d
-            conv_module3 = RandomFixedSeparableConvTrans2d
-            conv_module4 = RandomFixedSeparableConvTrans2d
-            conv_module5 = RandomFixedSeparableConvTrans2d
-        elif fixed and fixed_option == 'C':
             # first and last convs is trainable, others are fixed
-            n_channels = [ngf * 8 * 1, ngf * 4 * k, ngf * 2 * k, ngf * 1 * 1]
-            conv_module1 = nn.ConvTranspose2d
-            conv_module2 = RandomFixedSeparableConvTrans2d
-            conv_module3 = RandomFixedSeparableConvTrans2d
-            conv_module4 = RandomFixedSeparableConvTrans2d
+            # we don't use the widening factor for the last convolution as it
+            # is trainable and has a normal number of parameters
+            n_channels = [ngf * 8 * k, ngf * 4 * k, ngf * 2 * k, ngf * 1 * 1]
+            conv_module1 = DCGANFixedLayerTrans
+            conv_module2 = DCGANFixedLayerTrans
+            conv_module3 = DCGANFixedLayerTrans
+            conv_module4 = DCGANFixedLayerTrans
             conv_module5 = nn.ConvTranspose2d
 
         # input Z. nz x 1 x 1
@@ -86,7 +154,7 @@ class Discriminator(nn.Module):
     def __init__(self, nc, ndf, k=1, fixed=False, fixed_option='A'):
         super(Discriminator, self).__init__()
 
-        assert fixed_option in ['A', 'B', 'C']
+        assert fixed_option in ['A', 'B']
 
         if not fixed:
             # all convs are trainable
@@ -99,27 +167,21 @@ class Discriminator(nn.Module):
         elif fixed and fixed_option == 'A':
             # all convs are fixed
             n_channels = [ndf * 1 * k, ndf * 2 * k, ndf * 4 * k, ndf * 8 * k]
-            conv_module1 = RandomFixedSeparableConv2d
-            conv_module2 = RandomFixedSeparableConv2d
-            conv_module3 = RandomFixedSeparableConv2d
-            conv_module4 = RandomFixedSeparableConv2d
-            conv_module5 = RandomFixedSeparableConv2d
+            conv_module1 = DCGANFixedLayer
+            conv_module2 = DCGANFixedLayer
+            conv_module3 = DCGANFixedLayer
+            conv_module4 = DCGANFixedLayer
+            conv_module5 = DCGANFixedLayer
         elif fixed and fixed_option == 'B':
-            # last conv is trainable, others are fixed
-            n_channels = [ndf * 1 * k, ndf * 2 * k, ndf * 4 * k, ndf * 8 * 1]
-            conv_module1 = RandomFixedSeparableConv2d
-            conv_module2 = RandomFixedSeparableConv2d
-            conv_module3 = RandomFixedSeparableConv2d
-            conv_module4 = RandomFixedSeparableConv2d
-            conv_module5 = nn.Conv2d
-        elif fixed and fixed_option == 'C':
             # first and last convs is trainable, others are fixed
-            n_channels = [ndf * 1 * 1, ndf * 2 * k, ndf * 4 * k, ndf * 8 * 1]
+            # we don't use the widening factor for the first convolution as it
+            # is trainable and has a normal number of parameters
+            n_channels = [ndf * 1 * 1, ndf * 2 * k, ndf * 4 * k, ndf * 8 * k]
             conv_module1 = nn.Conv2d
-            conv_module2 = RandomFixedSeparableConv2d
-            conv_module3 = RandomFixedSeparableConv2d
-            conv_module4 = RandomFixedSeparableConv2d
-            conv_module5 = nn.Conv2d
+            conv_module2 = DCGANFixedLayer
+            conv_module3 = DCGANFixedLayer
+            conv_module4 = DCGANFixedLayer
+            conv_module5 = DCGANFixedLayer
 
         # x is (nc) x 64 x 64
 
