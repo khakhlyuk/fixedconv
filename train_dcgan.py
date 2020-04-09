@@ -214,7 +214,7 @@ for epoch in range(args.num_epochs):
         batch_size = real_cpu.size(0)
         label = torch.full((batch_size,), real_label, device=device)
 
-        output = netD(real_cpu)
+        output = netD(real_cpu).view(-1)
         errD_real = criterion(output, label)
         errD_real.backward()
         D_x = output.mean().item()
