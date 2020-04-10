@@ -206,3 +206,42 @@ class ResNet(nn.Module):
         x = self.fc(x)
         return x
 
+
+class MiniConvNet(nn.Module):
+    """A small 4-layer CNN with 24K parameters to compare weaker models to.
+    """
+
+    def __init__(self, num_classes=10):
+        super(MiniConvNet, self).__init__()
+
+        # number of channels in each stage
+        n_channels = [16, 32, 64]
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, n_channels[0], kernel_size=3, stride=2,
+                                padding=1, bias=False),
+            nn.BatchNorm2d(n_channels[0]),
+            nn.ReLU(inplace=True))
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(n_channels[0], n_channels[1], kernel_size=3,
+                      stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(n_channels[1]),
+            nn.ReLU(inplace=True))
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(n_channels[1], n_channels[2], kernel_size=3,
+                      stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(n_channels[2]),
+            nn.ReLU(inplace=True))
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(n_channels[2], num_classes)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.avgpool(x)  # global average pooling
+        x = self.flatten(x)
+        x = self.fc(x)
+        return x
+

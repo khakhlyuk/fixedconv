@@ -10,31 +10,20 @@ from utils.callbacks import ReduceLROnPlateauCallback, SaveModelCallback, Metric
 from utils.tensorboard import LearnerTensorboardWriter
 from fastai.callbacks.general_sched import GeneralScheduler, TrainingPhase
 
-import modules.nets as nets
+from modules.xception import Xception
 
 
-model_names = sorted(name for name in nets.__dict__
-                     if name.islower() and not name.startswith("__")
-                     and "resnet" in name
-                     and callable(nets.__dict__[name]))
 datasets = ['cifar10', 'cifar100', 'mnist', 'fmnist']
 
 parser = argparse.ArgumentParser(description='Training resnets and fixed resnets')
-parser.add_argument('--model', '-a', required=True, metavar='MODEL',
-                    choices=model_names,
-                    help='model architecture: ' + ' | '.join(model_names))
+parser.add_argument('-f', '--fixed',
+                    action='store_true',
+                    help='Trainable or fixed Xception')
 parser.add_argument('--dataset', required=True,
                     choices=datasets,
                     help='datasets: ' + ' | '.join(datasets))
-parser.add_argument('-f', '--fixed',
-                    action='store_true',
-                    help='Trainable or fixed ResNet')
-parser.add_argument('--ff', '--fully_fixed',
-                    action='store_true',
-                    help='If convolutions at stage 0 should be replaced by '
-                         'fixed too.')
-parser.add_argument('-k', default=1, type=float,
-                    help='widening factor k (default: 1). Used for fixed resnets only')
+# parser.add_argument('-k', default=1, type=float,
+#                     help='widening factor k (default: 1). Used for fixed resnets only')
 parser.add_argument('--data_path', default='/root/data',
                     help='path to save downloaded data to')
 parser.add_argument('--logs_path', default='./logs_resnet',
@@ -72,28 +61,27 @@ def main():
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    model_name = args.model
-    k = args.k
     fixed = args.fixed
-    fully_fixed = args.ff
     cuda = args.cuda
 
     if args.dataset in ['cifar10', 'mnist', 'fmnist']:
         num_classes = 10
+        input_size = 32
     elif args.dataset in ['cifar100']:
         num_classes = 100
+        input_size = 32
     else:
         raise RuntimeError
 
-    if not args.fixed:
-        model_code = model_name + '(k={})'.format(k)
-    else:
-        model_code = 'fixed_' + model_name + '(k={}_ff={})'.format(
-            k, fully_fixed)
-    model = nets.__dict__[model_name](
-        num_classes=num_classes, k=k, fixed=fixed, fully_fixed=fully_fixed)
+    middle_flow_length = 8
 
-    reduce_on = False
+    if not args.fixed:
+        model_code = 'xception'
+    else:
+        model_code = 'fixed_xception'
+    model = Xception(num_classes, fixed, middle_flow_length, input_size)
+
+    reduce_on = True
     save_model = True
     log = True
     write = True
@@ -191,7 +179,6 @@ def main():
                     metrics=[accuracy], callback_fns=callback_fns,
                     path=logs_path, model_dir=model_saves_dir)
 
-
     print("Running on", device)
     print("-" * 50)
     print('Training', model_code)
@@ -220,7 +207,6 @@ def main():
     loss_valid, accu_valid = learn.validate(dl=learn.data.valid_dl)
     loss_test,  accu_test  = learn.validate(dl=learn.data.test_dl)
     # accu_train, accu_valid, accu_test = accu_train.item(), accu_valid.item(), accu_test.item()
-
 
     val_dict = {'name': model_code,
                 'accu_test': accu_test * 100,

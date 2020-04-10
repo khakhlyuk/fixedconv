@@ -42,80 +42,14 @@ class SeparableConv2d(nn.Module):
 
 
 class EntryFlow(nn.Module):
-    '''
-    Original Outputs of each layer
-
-    Input entry flow: 299 x 299 x 3
-    ---
-    150 x 150 x 32
-    150 x 150 x 64
-    ---
-    150 x 150 x 128
-    150 x 150 x 128
-    75 x 75 x 128
-    ---
-    75 x 75 x 256
-    75 x 75 x 256
-    38 x 38 x 256
-    ---
-    38 x 38 x 728
-    38 x 38 x 728
-    19 x 19 x 728
-    ---
-    Output entry flow: 19 x 19 x 728
-
-    ---------------------------------
-    Our Outputs of each layer
-
-    Input entry flow: 64 x 64 x 3
-    ---
-    64 x 64 x 128
-    64 x 64 x 128
-    ---
-    64 x 64 x 256
-    64 x 64 x 256
-    32 x 32 x 256
-    ---
-    32 x 32 x 728
-    32 x 32 x 728
-    16 x 16 x 728
-    ---
-    Output entry flow: 16 x 16 x 728
-    '''
 
     def __init__(self, conv_module, size):
         super(EntryFlow, self).__init__()
 
         if size == 32:
-            # 32x32x3 to 32x32x256 to 32x32x256
+            # 32x32x3 to 32x32x128 to 32x32x128
             self.conv1 = nn.Sequential(
                 # 32x32x3x512 vs 150x150x3x32
-                nn.Conv2d(3, 256, 3, padding=1, bias=False),
-                nn.BatchNorm2d(256),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(256, 256, 3, padding=1, bias=False),
-                nn.BatchNorm2d(256),
-                nn.ReLU(inplace=True),
-            )
-
-            # 32x32x256 to 32x32x768 to 16x16x728
-            self.conv2_residual = nn.Sequential(
-                conv_module(256, 728, 3, padding=1),
-                nn.BatchNorm2d(728),
-                nn.ReLU(inplace=True),
-                conv_module(728, 728, 3, padding=1),
-                nn.BatchNorm2d(728),
-                nn.MaxPool2d(3, stride=2, padding=1),
-            )
-
-            self.conv2_shortcut = ShortcutConnection(256, 728, 2)
-            self.conv3_residual = nn.Identity()
-            self.conv3_shortcut = nn.Identity()
-
-        elif size == 64:
-            # 64x64x3 to 64x64x128 to 64x64x128
-            self.conv1 = nn.Sequential(
-                # 64x64x3x128 vs 150x150x3x32
                 nn.Conv2d(3, 128, 3, padding=1, bias=False),
                 nn.BatchNorm2d(128),
                 nn.ReLU(inplace=True),
@@ -124,7 +58,7 @@ class EntryFlow(nn.Module):
                 nn.ReLU(inplace=True),
             )
 
-            # 64x64x128 to 64x64x256 to 32x32x256
+            # 32x32x128 to 32x32x768 to 16x16x256
             self.conv2_residual = nn.Sequential(
                 conv_module(128, 256, 3, padding=1),
                 nn.BatchNorm2d(256),
@@ -135,19 +69,45 @@ class EntryFlow(nn.Module):
             )
 
             self.conv2_shortcut = ShortcutConnection(128, 256, 2)
+            self.conv3_residual = nn.Identity()
+            self.conv3_shortcut = nn.Identity()
 
-            # 32x32x256 to 32x32x728 to 16x16x728
-            self.conv3_residual = nn.Sequential(
+        elif size == 64:
+            # 64x64x3 to 64x64x64 to 64x64x64
+            self.conv1 = nn.Sequential(
+                # 64x64x3
+                nn.Conv2d(3, 64, 3, padding=1, bias=False),
+                nn.BatchNorm2d(128),
                 nn.ReLU(inplace=True),
-                conv_module(256, 728, 3, padding=1),
-                nn.BatchNorm2d(728),
+                nn.Conv2d(64, 64, 3, padding=1, bias=False),
+                nn.BatchNorm2d(64),
                 nn.ReLU(inplace=True),
-                conv_module(728, 728, 3, padding=1),
-                nn.BatchNorm2d(728),
+            )
+
+            # 64x64x64 to 64x64x128 to 32x32x128
+            self.conv2_residual = nn.Sequential(
+                conv_module(64, 128, 3, padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                conv_module(128, 128, 3, padding=1),
+                nn.BatchNorm2d(128),
                 nn.MaxPool2d(3, stride=2, padding=1),
             )
 
-            self.conv3_shortcut = ShortcutConnection(256, 728, 2)
+            self.conv2_shortcut = ShortcutConnection(64, 128, 2)
+
+            # 32x32x128 to 32x32x256 to 16x16x256
+            self.conv3_residual = nn.Sequential(
+                nn.ReLU(inplace=True),
+                conv_module(128, 256, 3, padding=1),
+                nn.BatchNorm2d(256),
+                nn.ReLU(inplace=True),
+                conv_module(256, 256, 3, padding=1),
+                nn.BatchNorm2d(256),
+                nn.MaxPool2d(3, stride=2, padding=1),
+            )
+
+            self.conv3_shortcut = ShortcutConnection(128, 256, 2)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -169,18 +129,18 @@ class MiddleFLowBlock(nn.Module):
         self.shortcut = nn.Sequential()
         self.conv1 = nn.Sequential(
             nn.ReLU(inplace=True),
-            conv_module(728, 728, 3, padding=1),
-            nn.BatchNorm2d(728)
+            conv_module(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256)
         )
         self.conv2 = nn.Sequential(
             nn.ReLU(inplace=True),
-            conv_module(728, 728, 3, padding=1),
-            nn.BatchNorm2d(728)
+            conv_module(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256)
         )
         self.conv3 = nn.Sequential(
             nn.ReLU(inplace=True),
-            conv_module(728, 728, 3, padding=1),
-            nn.BatchNorm2d(728)
+            conv_module(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256)
         )
 
     def forward(self, x):
@@ -214,31 +174,29 @@ class ExitFLow(nn.Module):
 
     def __init__(self, conv_module):
         super(ExitFLow, self).__init__()
-        # 16x16x728
+        # 16x16x256
         self.residual = nn.Sequential(
             nn.ReLU(),
-            conv_module(728, 728, 3, padding=1),
-            nn.BatchNorm2d(728),
+            conv_module(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
-            conv_module(728, 1024, 3, padding=1),
-            nn.BatchNorm2d(1024),
+            conv_module(256, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
             nn.MaxPool2d(3, stride=2, padding=1)
         )
 
-        self.shortcut = ShortcutConnection(728, 1024, 2)
+        self.shortcut = ShortcutConnection(256, 512, 2)
 
-        # 8x8x1024
+        # 8x8x512
         self.conv = nn.Sequential(
-            conv_module(1024, 1536, 3, padding=1),
-            nn.BatchNorm2d(1536),
+            conv_module(512, 768, 3, padding=1),
+            nn.BatchNorm2d(768),
             nn.ReLU(inplace=True),
-            conv_module(1536, 2048, 3, padding=1),
-            nn.BatchNorm2d(2048),
+            conv_module(768, 1024, 3, padding=1),
+            nn.BatchNorm2d(1024),
             nn.ReLU(inplace=True)
         )
-        # 8x8x2048
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # 1x1x2048
 
     def forward(self, x):
         shortcut = self.shortcut(x)
@@ -250,27 +208,21 @@ class ExitFLow(nn.Module):
         return output
 
 
-class Xception(nn.Module):
+class SlimXception(nn.Module):
 
     def __init__(self, num_classes=100, fixed=False,
                  middle_flow_length=8, input_size=32):
-        super(Xception, self).__init__()
-
+        super(SlimXception, self).__init__()
 
         if fixed:
             conv_module = RandomFixedSeparableConv2d
         else:
             conv_module = SeparableConv2d
 
-        # 64x64x3
         self.entry_flow = EntryFlow(conv_module, input_size)
-        # 16x16x728
         self.middle_flow = MiddleFlow(conv_module, middle_flow_length)
-        # 16x16x728
         self.exit_flow = ExitFLow(conv_module)
-        # 1x1x2048
-        self.fc = nn.Linear(2048, num_classes)
-        # 1x1x2048
+        self.fc = nn.Linear(1024, num_classes)
 
     def forward(self, x):
         x = self.entry_flow(x)

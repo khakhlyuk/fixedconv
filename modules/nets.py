@@ -2,6 +2,10 @@ from modules.resnet import *
 from modules.preact_resnet import *
 
 
+def mini_convnet(num_classes=10):
+    return MiniConvNet(num_classes)
+
+
 def resnet20(num_classes=10, k=1, fixed=False, fully_fixed=False):
     return ResNet(BasicBlock, [3, 3, 3],
                   num_classes, k, fixed, fully_fixed)

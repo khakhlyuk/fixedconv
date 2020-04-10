@@ -18,9 +18,9 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from utils.plot import plot_images
 
 
-def get_train_valid_loader(dataset, data_dir, batch_size, augment, random_seed,
-                           valid_size=0.1, shuffle=True, show_sample=False,
-                           num_workers=4, pin_memory=False):
+def get_data_loaders(dataset, data_dir, batch_size, augment, random_seed,
+                     valid_size=0.1, shuffle=True, show_sample=False,
+                     num_workers=4, pin_memory=False):
     """
     Utility function for loading and returning train and valid
     multi-process iterators over the CIFAR-10 dataset. A sample
@@ -99,6 +99,20 @@ def get_train_valid_loader(dataset, data_dir, batch_size, augment, random_seed,
             transforms.ToTensor(),
             normalize,
         ])
+
+    elif dataset == 'tiny-imagenet':
+        dset = datasets.ImageFolder
+        image_size = 64
+        normalize = transforms.Normalize(
+            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+        )
+        train_transform = transforms.Compose([
+            transforms.RandomCrop(image_size, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize,
+        ])
+
     assert dataset
 
     if augment == False:
@@ -112,14 +126,27 @@ def get_train_valid_loader(dataset, data_dir, batch_size, augment, random_seed,
             normalize,
     ])
 
+    if dset == datasets.ImageFolder:
+        train_path = data_dir + '/test'
+        val_path = data_dir + '/val'
+        test_path = data_dir + '/test'
+    else:
+        train_path = data_dir
+        val_path = data_dir
+        test_path = data_dir
+
     # load the dataset
     train_dataset = dset(
-        root=data_dir, train=True,
+        root=train_path, train=True,
         download=True, transform=train_transform,
     )
 
     valid_dataset = dset(
-        root=data_dir, train=True,
+        root=val_path, train=True,
+        download=True, transform=valid_transform,
+    )
+    test_dataset = dset(
+        root=test_path, train=False,
         download=True, transform=valid_transform,
     )
 
@@ -144,6 +171,10 @@ def get_train_valid_loader(dataset, data_dir, batch_size, augment, random_seed,
         valid_dataset, batch_size=batch_size, sampler=valid_sampler,
         num_workers=num_workers, pin_memory=pin_memory,
     )
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=shuffle,
+        num_workers=num_workers, pin_memory=pin_memory,
+    )
 
     # visualize some images
     if show_sample:
@@ -155,69 +186,4 @@ def get_train_valid_loader(dataset, data_dir, batch_size, augment, random_seed,
         images, labels = data_iter.next()
         plot_images(images, labels, unnormalize=True, interpolate=True)
 
-    return train_loader, valid_loader
-
-
-def get_test_loader(dataset, data_dir,
-                    batch_size,
-                    shuffle=True,
-                    num_workers=4,
-                    pin_memory=False):
-    """
-    Utility function for loading and returning a multi-process
-    test iterator over the CIFAR-10 dataset.
-
-    If using CUDA, num_workers should be set to 1 and pin_memory to True.
-
-    Params
-    ------
-    - data_dir: path directory to the dataset.
-    - batch_size: how many samples per batch to load.
-    - shuffle: whether to shuffle the dataset after every epoch.
-    - num_workers: number of subprocesses to use when loading the dataset.
-    - pin_memory: whether to copy tensors into CUDA pinned memory. Set it to
-      True if using GPU.
-
-    Returns
-    -------
-    - data_loader: test set iterator.
-    """
-
-    # First, PIL transforms are applied, then Tensor transforms.
-    if dataset == 'cifar10':
-        dset = datasets.CIFAR10
-        normalize = transforms.Normalize(
-            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-
-    elif dataset == 'cifar100':
-        dset = datasets.CIFAR100
-        normalize = transforms.Normalize(
-            (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-
-    elif dataset == 'mnist':
-        dset = datasets.MNIST
-        normalize = transforms.Normalize(0.5, 0.5)
-
-    elif dataset == 'fmnist':
-        dset = datasets.FashionMNIST
-        normalize = transforms.Normalize(0.5, 0.5)
-
-    assert dataset
-
-    # define transform
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        normalize,
-    ])
-
-    dataset = dset(
-        root=data_dir, train=False,
-        download=True, transform=transform,
-    )
-
-    data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, shuffle=shuffle,
-        num_workers=num_workers, pin_memory=pin_memory,
-    )
-
-    return data_loader
+    return train_loader, valid_loader, test_loader

@@ -1,6 +1,6 @@
 import argparse
 
-from utils.data_loader import get_train_valid_loader, get_test_loader
+from utils.data_loader import get_data_loaders
 from utils.utils import num_params, format_scientific
 
 from fastai.vision import *
@@ -90,17 +90,11 @@ def main():
     model.to(device)
 
     # Data
-    train_loader, valid_loader = get_train_valid_loader(
+    train_loader, valid_loader, test_loader = get_data_loaders(
         dataset=args.dataset,
         data_dir=data_path, valid_size=0.1, augment=True, random_seed=seed,
         batch_size=bs, num_workers=num_workers, shuffle=True,
         pin_memory=pin_memory, show_sample=False)
-
-    test_loader = get_test_loader(
-        dataset=args.dataset,
-        data_dir=data_path,
-        batch_size=bs, num_workers=num_workers, shuffle=False,
-        pin_memory=pin_memory)
 
     # setting up fastai objects
     bunch = ImageDataBunch(train_loader, valid_loader, test_dl=test_loader,
